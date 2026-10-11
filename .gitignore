@@ -1,0 +1,42 @@
+# .NET build and publish output
+[Bb]in/
+[Oo]bj/
+/artifacts/
+/release/
+
+# IDE caches and user settings
+.vs/
+.idea/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+*.sln.iml
+
+# Test results and coverage
+TestResults/
+coverage/
+*.coverage
+*.coveragexml
+
+# Node dependencies and package-manager logs
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Local environment files (keep templates versioned)
+.env
+.env.*
+!.env.example
+!.env.sample
+!.env.template
+
+# OS metadata and temporary editor files
+.DS_Store
+Thumbs.db
+Desktop.ini
+*.swp
+*.swo
+*~

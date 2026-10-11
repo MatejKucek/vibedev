@@ -1,0 +1,33 @@
+<Window x:Class="Vibedev.MainWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:ad="clr-namespace:AvalonDock;assembly=AvalonDock"
+        Title="Vibedev" Width="1440" Height="920" MinWidth="1000" MinHeight="640" WindowStartupLocation="CenterScreen">
+    <Grid>
+        <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="26"/></Grid.RowDefinitions>
+        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition x:Name="ProjectsColumn" Width="224" MinWidth="160"/><ColumnDefinition x:Name="ProjectsSplitterColumn" Width="4"/><ColumnDefinition Width="*" MinWidth="400"/></Grid.ColumnDefinitions>
+            <Border Background="#202024" BorderBrush="#34343A" BorderThickness="0,0,1,0"><StackPanel Margin="4,12">
+                <Button x:Name="DashboardToggleButton" Content="◈" FontSize="22" Padding="6,10" Margin="0,0,0,10" Background="Transparent" BorderThickness="0" ToolTip="Show / hide dashboard" Click="Dashboard_Click"/>
+                <Button x:Name="ProjectsToggleButton" Content="▤" FontSize="21" Padding="6,10" Margin="0,0,0,10" Background="Transparent" BorderThickness="0" ToolTip="Show / hide Projects (Ctrl+B)" Click="ToggleProjects_Click"/>
+                <Button Content="+" FontSize="22" Padding="6,10" Margin="0,0,0,10" Background="Transparent" BorderThickness="0" ToolTip="Add an existing project folder" Click="AddProject_Click"/>
+                <Button Content="⌕" FontSize="24" Padding="6,10" Margin="0,0,0,10" Background="Transparent" BorderThickness="0" ToolTip="Scan a directory for Git repositories" Click="Scan_Click"/>
+                <Button x:Name="TerminalToggleButton" Content="›_" FontFamily="Consolas" FontSize="16" Padding="4,10" Margin="0" Background="Transparent" BorderThickness="0" ToolTip="Show / hide terminal and task output (Ctrl+`)" Click="Terminal_Click"/>
+            </StackPanel></Border>
+            <Grid x:Name="ProjectsSidebar" Grid.Column="1" Background="#202024"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
+                <DockPanel Margin="16,14,8,12"><Button Content="×" Padding="6,2" Margin="6,0,0,0" Background="Transparent" BorderThickness="0" DockPanel.Dock="Right" ToolTip="Hide Projects (Ctrl+B)" Click="ToggleProjects_Click"/><TextBlock x:Name="ProjectCount" Text="0" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="#A78BFA"/><TextBlock Text="PROJECTS" FontSize="10" FontWeight="Bold" Foreground="#9898A6" VerticalAlignment="Center"/></DockPanel>
+                <TextBox Grid.Row="1" x:Name="ProjectFilter" Margin="10,0,10,10" ToolTip="Filter projects by name or path" TextChanged="ProjectFilter_Changed"/>
+                <ListBox Grid.Row="2" x:Name="ProjectList" Margin="6,0" SelectionChanged="ProjectList_Changed"/>
+                <StackPanel Grid.Row="3" Margin="12,14"><Button Content="⌕ Scan a directory" Click="Scan_Click" ToolTip="Find repositories recursively" Margin="0,0,0,8"/><TextBlock x:Name="ScanRootLabel" Text="Find repositories in subfolders" FontSize="10" Foreground="#777784" TextWrapping="Wrap"/></StackPanel>
+            </Grid><GridSplitter x:Name="ProjectsSplitter" Grid.Column="2" Width="4" HorizontalAlignment="Stretch" ToolTip="Resize Projects sidebar"/>
+            <Grid Grid.Column="3"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*" MinHeight="180"/><RowDefinition x:Name="TerminalSplitterRow" Height="4"/><RowDefinition x:Name="TerminalRow" Height="240" MinHeight="100"/></Grid.RowDefinitions>
+                <Border x:Name="DashboardHost" Background="#202024" BorderBrush="#34343A" BorderThickness="0,0,0,1"/>
+                <ad:DockingManager x:Name="Dock" Grid.Row="1" AllowMixedOrientation="True" Background="#18181B"/>
+                <GridSplitter x:Name="TerminalSplitter" Grid.Row="2" Height="4" HorizontalAlignment="Stretch" ToolTip="Resize terminal and task output"/>
+                <Grid x:Name="TerminalPanel" Grid.Row="3" Background="#18181B"><TabControl x:Name="BottomTabs"><TabItem Header="TERMINAL" ToolTip="Shared interactive PowerShell terminal"><Grid x:Name="TerminalHost"/></TabItem><TabItem Header="GIT &amp; TASK OUTPUT" ToolTip="Git operations and build output; Ctrl+click a location to open it"><TextBox x:Name="OperationOutput" IsReadOnly="True" AcceptsReturn="True" TextWrapping="NoWrap" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Auto" Background="#18181B" BorderThickness="0" FontFamily="Cascadia Code, Consolas" FontSize="12" Padding="14"/></TabItem></TabControl>
+                    <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" VerticalAlignment="Top" Margin="0,3,6,0"><TextBlock x:Name="TerminalLabel" Text="PowerShell · shared" Foreground="#9898A6" VerticalAlignment="Center" Margin="8,0,10,0" FontSize="11"/><Button Content="Stop" Click="Stop_Click" Padding="10,4" x:Name="StopButton" IsEnabled="False" ToolTip="Stop the running project and its child processes"/><Button Content="Clear" Click="ClearTerminal_Click" Padding="10,4" ToolTip="Clear the selected output view"/><Button Content="×" Click="HideTerminal_Click" Padding="7,4" ToolTip="Hide terminal and task output (Ctrl+`)"/></StackPanel>
+                </Grid>
+            </Grid>
+        </Grid>
+        <Border Grid.Row="1" Background="#2F2545"><DockPanel Margin="12,0"><TextBlock x:Name="StatusLabel" Text="Ready" FontSize="11" VerticalAlignment="Center"/><TextBlock DockPanel.Dock="Right" Text=".NET 10 · LOCAL WORKSPACE" FontSize="10" Foreground="#C4B5DB" HorizontalAlignment="Right" VerticalAlignment="Center"/></DockPanel></Border>
+    </Grid>
+</Window>

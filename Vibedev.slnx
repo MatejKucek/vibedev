@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Vibedev.Core/Vibedev.Core.csproj" />
+    <Project Path="src/Vibedev/Vibedev.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Vibedev.SmokeTests/Vibedev.SmokeTests.csproj" />
+    <Project Path="tests/Vibedev.Tests/Vibedev.Tests.csproj" />
+  </Folder>
+</Solution>

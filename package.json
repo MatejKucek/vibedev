@@ -1,0 +1,7 @@
+{
+  "name": "vibedev-terminal-assets",
+  "private": true,
+  "license": "SEE LICENSE IN LICENSE",
+  "scripts": { "build": "node scripts/copy-terminal.mjs" },
+  "dependencies": { "@xterm/xterm": "5.5.0", "@xterm/addon-fit": "0.10.0" }
+}

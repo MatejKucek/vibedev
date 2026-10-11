@@ -1,0 +1,77 @@
+Vibedev Source-Available License 1.0
+
+Copyright (c) 2026 the Vibedev authors and contributors.
+
+1. Scope
+
+"Software" means the original Vibedev source code, executable files,
+documentation and other materials provided under this license, including
+modifications and derivative versions of those materials. Third-party components
+are excluded and remain governed by their own licenses.
+
+2. Permission
+
+Subject to the conditions below, the copyright holders grant you a worldwide,
+non-exclusive, royalty-free license to use, run, copy, study and modify the
+Software for any purpose, including personal, educational, internal business
+and commercial work. You may redistribute the Software, in source or executable
+form, including modified versions, without charge under this same license.
+
+3. Commercial products and output
+
+You may use the Software to create, develop, test, build, maintain and deliver
+commercial products and services, including proprietary software and paid client
+work. You may sell, license and distribute those products and your work under
+terms of your choice. You do not owe royalties or attribution to Vibedev
+merely because you used it as a development tool.
+
+This license does not apply to your projects, data or output merely because the
+Software was used to create or process them. If you copy or incorporate portions
+of the Software itself into a product, those portions remain subject to this
+license; calling them output does not remove these conditions.
+
+4. No sale of the Software
+
+Unless you obtain separate written permission from the relevant copyright
+holders, you may not:
+
+(a) sell, rent, lease or commercially license copies of the Software, including
+    modified, renamed or rebranded versions;
+(b) charge for downloading, accessing or using the Software, including offering
+    the Software's functionality as a paid hosted service; or
+(c) distribute the Software as part of a paid bundle or other paid offering,
+    even if its price is not listed separately.
+
+These restrictions concern selling or monetizing the Software itself. They do
+not prohibit commercial work or products permitted by section 3. You may charge
+for optional support, training or consulting, provided payment is not required
+to obtain or use the Software and the Software is not sold as part of that service.
+
+5. Redistribution conditions
+
+Every copy or substantial portion of the Software that you distribute must
+retain this license and the applicable copyright, attribution and third-party
+notices. Modified versions must prominently state that they have been modified.
+You may not remove the restrictions in this license or grant recipients broader
+rights to the Software than you received. No trademark rights or permission to
+claim endorsement by the original authors are granted.
+
+6. Termination
+
+Your rights under this license terminate automatically if you violate its terms.
+Upon termination, you must stop using and distributing the Software unless the
+relevant copyright holders reinstate your rights in writing. Recipients who
+received copies from you and comply with this license retain their own rights.
+
+7. Disclaimer
+
+TO THE MAXIMUM EXTENT PERMITTED BY APPLICABLE LAW, THE SOFTWARE IS PROVIDED
+"AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT
+LIMITED TO WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE
+AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE
+LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE
+SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+This is a custom source-available license. Its restrictions on selling the
+Software mean it is not an Open Source Initiative-approved open-source license.

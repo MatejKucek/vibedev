@@ -1,0 +1,30 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\Vibedev.Core\Vibedev.Core.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="AvalonEdit" Version="6.3.1.120" />
+    <PackageReference Include="Dirkster.AvalonDock" Version="5.0.1" />
+    <PackageReference Include="Dirkster.AvalonDock.Serializer.Xml" Version="5.0.1" />
+    <PackageReference Include="Dirkster.AvalonDock.Themes.VS2013" Version="5.0.1" />
+    <PackageReference Include="Microsoft.Web.WebView2" Version="1.0.4258.31" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Content Include="Terminal\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\LICENSE;..\..\README.md;..\..\THIRD-PARTY-NOTICES.md" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <InternalsVisibleTo Include="Vibedev.SmokeTests" />
+  </ItemGroup>
+
+</Project>
