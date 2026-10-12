@@ -1,0 +1,13 @@
+Generated with the built-in image_gen tool. Source: app-icon.png.
+Windows icon: app-icon.ico, converted to RGBA bitmap ICO frames at
+16, 24, 32, 48, 64, 128 and 256 pixels for Windows/WPF compatibility.
+
+Generation prompt:
+Use case: logo-brand
+Asset type: square app icon, 1024 x 1024
+Primary request: A single bold white uppercase letter "V" centered on a rich purple background.
+Style: polished minimalist flat graphic, crisp geometric sans-serif letterform, balanced symmetrical V with thick strokes, excellent legibility at small sizes.
+Composition: straight-on square full-bleed purple canvas with the V occupying about 60% of the width, ample even padding. Purple background reaches every canvas edge.
+Color palette: vivid deep violet purple (#7C3AED) and pure white.
+Text (verbatim): "V"
+Constraints: only one V, no other text, no border, no mockup, no device, no shadows, no texture, no watermark.

@@ -17,7 +17,23 @@ public sealed class DashboardView : UserControl
 {
     private readonly MainWindow main;
     internal IReadOnlyList<ProjectState> DisplayedProjects { get; private set; } = [];
-    public DashboardView(MainWindow main) { this.main = main; Refresh(); }
+    public DashboardView(MainWindow main)
+    {
+        this.main = main;
+        ContextMenu = new ContextMenu { Style = (Style)main.FindResource("ProjectContextMenu") };
+        ContextMenu.Opened += (_, _) =>
+        {
+            ContextMenu.Items.Clear();
+            foreach (var (label, action) in new (string, Action)[] {
+                ("Add project…", main.AddProject), ("Refresh statuses", main.RefreshStatuses),
+                ("Pull all projects", () => main.PullAll()), ("Hide dashboard", main.ToggleDashboard) })
+            {
+                var item = new MenuItem { Header = label, Style = (Style)main.FindResource("ProjectMenuItem"), IsEnabled = label != "Pull all projects" || !main.IsPulling };
+                item.Click += (_, _) => action(); ContextMenu.Items.Add(item);
+            }
+        };
+        Refresh();
+    }
     public void Refresh()
     {
         var body = new DockPanel { Margin = new(12), VerticalAlignment = VerticalAlignment.Top };
@@ -40,7 +56,9 @@ public sealed class DashboardView : UserControl
             var state = project.Busy ? project.Activity : project.Failed ? "Failed" : project.Git?.Changes > 0 ? $"● {project.Git.Changes} changes" : project.Git?.IsRepository == true ? "Clean" : "Local";
             var status = Ui.Text(state, 11, project.Failed ? "#F87171" : project.Git?.Changes > 0 ? "#FBBF24" : "#9898A6"); status.TextWrapping = TextWrapping.NoWrap; status.TextTrimming = TextTrimming.CharacterEllipsis; status.MaxWidth = 140; status.VerticalAlignment = VerticalAlignment.Center; Grid.SetColumn(status, 2); row.Children.Add(status);
             var frame = Ui.Card(row, new Thickness(10, 8, 10, 8)); frame.CornerRadius = new(4); frame.BorderBrush = Ui.Brush("#605272");
-            list.Items.Add(new ListBoxItem { Content = frame, Tag = project, Margin = new(0, 0, 8, 0), Padding = new(2), ToolTip = project.Entry.Path + (project.Activity.Length > 0 ? "\n" + project.Activity : "") });
+            var item = new ListBoxItem { Content = frame, Tag = project, Margin = new(0, 0, 8, 0), Padding = new(2), ContextMenu = main.CreateProjectContextMenu(project), ToolTip = project.Entry.Path + (project.Activity.Length > 0 ? "\n" + project.Activity : "") };
+            item.PreviewMouseRightButtonDown += (_, e) => e.Handled = true;
+            list.Items.Add(item);
         }
         list.SelectionChanged += (_, _) => { if (list.SelectedItem is ListBoxItem { Tag: ProjectState project }) main.OpenProject(project); };
         if (DisplayedProjects.Count == 0) { var empty = Ui.Text("Open a project from the sidebar or add a project.", 12, "#777784"); empty.VerticalAlignment = VerticalAlignment.Center; body.Children.Add(empty); } else body.Children.Add(list);

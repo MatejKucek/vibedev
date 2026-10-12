@@ -29,7 +29,7 @@ Run `artifacts/Vibedev/Vibedev.exe`. Keep the whole published folder together. G
 - Hide or show the Projects sidebar with the activity-rail button or `Ctrl+B`; its close button also hides it. Visibility and width are remembered.
 - **Split → / Split ↓** opens a project beside the current panel; repeat inside either pane to nest layouts. A project can appear in multiple panels.
 - Each project panel has a distinct frame and a top header with its name, folder path and close button, above the run controls. Project tab strips stay hidden. Switch projects through the sidebar or dashboard. **Float** detaches a panel. Dock floating panels before splitting them.
-- Right-click a project name to move left/right, **Replace project** with another registered project, or **Swap with project**. Replacement checks unsaved edits and keeps the panel's position, including floating windows. Swaps preserve each panel's editors and work across panel groups, splits and floating windows.
+- Right-click a dashboard project card or project panel for **Close project**, **Float project / Dock project**, Git review/commit/pull/push, status refresh, move left/right, **Replace project**, or **Swap with project**. Dashboard actions target that project's active panel, or its first panel if another project is active. Closing checks unsaved edits and leaves the project registered. Replacement keeps the panel's position, including floating windows; swaps preserve editors across groups, splits and floating windows. Right-click the dashboard background to add projects, refresh statuses, pull all projects or hide the dashboard.
 - Hide or show the terminal and task output with the activity-rail terminal button, the panel's close button or `Ctrl+backtick`. Its height and visibility are remembered; running a project reveals it again.
 - Right-click a sidebar project to remove it from the workspace. Its files stay on disk.
 - Projects, scan root, panel sizes, floating positions and open file paths persist in `%LOCALAPPDATA%/Vibedev`. Unsaved edits are handled before closing; unsaved content itself is not persisted.
@@ -110,6 +110,7 @@ dotnet test tests/Vibedev.Tests -c Release
 dotnet run --project tests/Vibedev.SmokeTests -c Release
 dotnet run --project tests/Vibedev.SmokeTests -c Release -- --project-drag
 dotnet run --project tests/Vibedev.SmokeTests -c Release -- --dashboard
+dotnet run --project tests/Vibedev.SmokeTests -c Release -- --context-menu
 ```
 
 Core tests use disposable local Git remotes and check selective staging/unstaging/committing, renames, Unicode paths, build-location parsing, LSP message framing, commit-all, push/pull, cancellation, text encoding, external-change protection, recursive discovery, project search and launch resolution. Windows smoke tests exercise actual WPF panels, file watching, Git diffs and selection, tab swaps, terminal visibility, C# completion/diagnostics/hover/definitions, clickable xterm errors, layout restoration, WebView2 and ConPTY input/stop. Install C# support with the **C# server** button (or `dotnet tool install --global csharp-ls --version 0.26.0`) before running smoke tests. Screenshots/results are written under `artifacts/`, leaving workspace projects untouched.

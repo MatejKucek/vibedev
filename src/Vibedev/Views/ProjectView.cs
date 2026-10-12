@@ -51,7 +51,7 @@ public sealed class ProjectView : UserControl, IDisposable
         identity.ColumnDefinitions.Add(new() { Width = GridLength.Auto, MaxWidth = 160 }); identity.ColumnDefinitions.Add(new());
         ProjectTitle = Ui.Text(project.Entry.Name, 16);
         ProjectTitle.FontWeight = FontWeights.SemiBold; ProjectTitle.TextWrapping = TextWrapping.NoWrap; ProjectTitle.TextTrimming = TextTrimming.CharacterEllipsis;
-        ProjectTitle.Margin = new(0, 0, 10, 0); ProjectTitle.VerticalAlignment = VerticalAlignment.Center; ProjectTitle.ToolTip = project.Entry.Path + "\nDrag the name to move or dock this panel\nRight-click to reorder, replace or swap project panels";
+        ProjectTitle.Margin = new(0, 0, 10, 0); ProjectTitle.VerticalAlignment = VerticalAlignment.Center; ProjectTitle.ToolTip = project.Entry.Path + "\nDrag the name to move or dock this panel\nRight-click for Git, float/dock, close and panel layout actions";
         ProjectDragHandle.Attach(ProjectTitle, point => DragRequested?.Invoke(point));
         identity.Children.Add(ProjectTitle);
         var projectPath = Ui.Text(project.Entry.Path, 11, "#B0A5C3"); projectPath.TextWrapping = TextWrapping.NoWrap; projectPath.TextTrimming = TextTrimming.CharacterEllipsis; projectPath.VerticalAlignment = VerticalAlignment.Center; projectPath.ToolTip = project.Entry.Path; Grid.SetColumn(projectPath, 1); identity.Children.Add(projectPath);

@@ -33,6 +33,7 @@ internal static partial class Program
             {
                 if (args.Contains("--project-drag")) await ExecuteProjectDragAsync(window, root);
                 else if (args.Contains("--dashboard")) await ExecuteDashboardAsync(window, root);
+                else if (args.Contains("--context-menu")) await ExecuteProjectContextMenusAsync(window, root);
                 else await ExecuteAsync(window, root);
                 Finish(0);
             }
@@ -248,7 +249,7 @@ internal static partial class Program
         Check(actualMenu.Items.OfType<MenuItem>().Any(i => i.Header.ToString() == "Swap with project"), "Native project-tab context menu populates swap commands for the clicked document");
         await Task.Delay(150);
         CheckMenuText(actualMenu);
-        var swapMenu = actualMenu.Items.OfType<MenuItem>().First(); swapMenu.IsSubmenuOpen = true;
+        var swapMenu = actualMenu.Items.OfType<MenuItem>().Single(i => i.Header.ToString() == "Swap with project"); swapMenu.IsSubmenuOpen = true;
         await Task.Delay(150);
         foreach (var item in swapMenu.Items.OfType<MenuItem>()) CheckMenuItemText(item);
         swapMenu.IsSubmenuOpen = false;

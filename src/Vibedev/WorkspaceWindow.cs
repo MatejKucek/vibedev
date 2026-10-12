@@ -55,7 +55,7 @@ public partial class MainWindow : Window
         SetProjectSidebarVisible(state.ProjectSidebarVisible);
         SetTerminalVisible(state.TerminalVisible);
         foreach (var entry in state.Projects.DistinctBy(p => p.Id)) Projects.Add(new(entry));
-        dashboard = new(this); DashboardHost.Child = dashboard; terminal = new(); TerminalHost.Children.Add(terminal);
+        dashboard = new(this); DashboardHost.Child = dashboard; DashboardHost.ContextMenu = dashboard.ContextMenu; terminal = new(); TerminalHost.Children.Add(terminal);
         terminal.Log += Log;
         terminal.TaskOutput += (line, directory) => LogAt(line, directory);
         terminal.LocationActivated += async location => await OpenLocationAsync(location);
@@ -182,15 +182,40 @@ public partial class MainWindow : Window
         view.FloatRequested = () => doc.Float();
         view.CloseRequested = () => doc.Close();
         view.DragRequested = point => DragProjectDocument(doc, point);
-        var menu = new ContextMenu { Style = (Style)FindResource("ProjectContextMenu") };
-        menu.Opened += (_, _) => { menu.Items.Clear(); PopulateProjectMenu(menu, doc); };
+        var menu = CreateProjectContextMenu(() => doc);
+        view.ContextMenu = menu;
         view.ProjectTitle.ContextMenu = menu;
         doc.ToolTip = view.Project.Entry.Path + "\nRight-click to reorder, replace or swap project panels";
+    }
+    internal ContextMenu CreateProjectContextMenu(ProjectState project) => CreateProjectContextMenu(() =>
+        Documents().FirstOrDefault(d => d.Content is ProjectView v && v.Project == project && d.IsActive) ??
+        Documents().FirstOrDefault(d => d.Content is ProjectView v && v.Project == project));
+
+    private ContextMenu CreateProjectContextMenu(Func<LayoutDocument?> target)
+    {
+        var menu = new ContextMenu { Style = (Style)FindResource("ProjectContextMenu") };
+        menu.Opened += (_, _) =>
+        {
+            menu.Items.Clear();
+            if (target() is { } document) PopulateProjectMenu(menu, document);
+        };
+        return menu;
     }
     internal void PopulateProjectMenu(ContextMenu menu, LayoutDocument document)
     {
         if (document.Content is ProjectView current)
         {
+            var gitMenu = new MenuItem { Header = "Git", IsEnabled = current.Project.Git?.IsRepository == true && !current.Project.Busy };
+            var review = new MenuItem { Header = "Review changes / commit staged" };
+            review.Click += (_, _) => { document.IsActive = true; document.IsSelected = true; current.ShowGit(); };
+            gitMenu.Items.Add(review);
+            foreach (var (label, action) in new[] { ("Pull", "pull"), ("Push", "push"), ("Commit all changes…", "commit") })
+            {
+                var item = new MenuItem { Header = label };
+                item.Click += (_, _) => GitAction(current.Project, action); gitMenu.Items.Add(item);
+            }
+            var refresh = new MenuItem { Header = "Refresh status" }; refresh.Click += (_, _) => RefreshStatuses();
+            menu.Items.Add(gitMenu); menu.Items.Add(refresh); menu.Items.Add(new Separator());
             var swap = new MenuItem { Header = "Swap with project", ToolTip = "Exchange tab positions or split/floating panel positions" };
             var peers = Documents().Where(d => d != document && d.Content is ProjectView).ToArray();
             for (var i = 0; i < peers.Length; i++)
@@ -213,10 +238,17 @@ public partial class MainWindow : Window
                 var right = new MenuItem { Header = "Move tab right", IsEnabled = pane.Children.IndexOf(document) < pane.Children.Count - 1 };
                 right.Click += (_, _) => { var index = pane.Children.IndexOf(document); if (index >= 0 && index < pane.Children.Count - 1) pane.MoveChild(index, index + 1); }; menu.Items.Add(right);
             }
-            var floating = new MenuItem { Header = "Float project" }; floating.Click += (_, _) => document.Float(); menu.Items.Add(floating);
+            var isFloating = document.IsFloating;
+            var floating = new MenuItem { Header = isFloating ? "Dock project" : "Float project", IsEnabled = isFloating ? document.CanMove : document.CanFloat && Dock.AllowFloatingWindows };
+            floating.Click += (_, _) =>
+            {
+                if (document.IsFloating) document.Dock(); else document.Float();
+                document.IsActive = true; document.IsSelected = true; dashboard.Refresh(); SaveWorkspace();
+            };
+            menu.Items.Add(floating);
             menu.Items.Add(new Separator());
         }
-        var close = new MenuItem { Header = "Close", IsEnabled = document.CanClose }; close.Click += (_, _) => document.Close(); menu.Items.Add(close);
+        var close = new MenuItem { Header = "Close project", IsEnabled = document.CanClose }; close.Click += (_, _) => document.Close(); menu.Items.Add(close);
         foreach (var item in menu.Items.OfType<MenuItem>()) item.Style = (Style)FindResource("ProjectMenuItem");
     }
     internal async Task<bool> ReplaceProjectAsync(LayoutDocument document, ProjectState project)
