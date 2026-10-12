@@ -4,6 +4,8 @@ using System.Text;
 namespace Vibedev.Core;
 
 public sealed record GitStatus(bool IsRepository, string Branch, int Changes, string? Error = null);
+public sealed record GitCommit(string Hash, string ShortHash, string Subject, string Author, DateTimeOffset Date);
+public sealed record GitCommitFile(string Path, string? OriginalPath, char Status);
 public sealed record GitFileChange(string Path, string? OriginalPath, char IndexStatus, char WorkTreeStatus)
 {
     public bool Staged => IndexStatus is not ' ' and not '?';
@@ -28,6 +30,56 @@ public sealed class GitService
 
     public Task<CommandResult> PushAsync(string path, Action<string>? output = null, CancellationToken cancellation = default)
         => ExecuteAsync(path, ["push"], output, cancellation);
+
+    public async Task<IReadOnlyList<GitCommit>> RecentCommitsAsync(string path, int count = 100, CancellationToken cancellation = default)
+    {
+        if (count < 1) throw new ArgumentOutOfRangeException(nameof(count));
+        var result = await ExecuteAsync(path, ["log", "--no-color", "--no-notes", "--no-show-signature", $"--max-count={count}", "-z", "--format=%H%x00%h%x00%s%x00%an%x00%aI"], null, cancellation);
+        if (!result.Success)
+        {
+            var repository = await ExecuteAsync(path, ["rev-parse", "--git-dir"], null, cancellation);
+            if (!repository.Success) throw new IOException(repository.Output);
+            var head = await ExecuteAsync(path, ["rev-parse", "--verify", "--quiet", "HEAD"], null, cancellation);
+            if (!head.Success) return [];
+            throw new IOException(result.Output);
+        }
+        var fields = result.Output.Split('\0'); var commits = new List<GitCommit>();
+        for (var i = 0; i + 4 < fields.Length; i += 5)
+            commits.Add(new(fields[i], fields[i + 1], fields[i + 2], fields[i + 3], DateTimeOffset.Parse(fields[i + 4], System.Globalization.CultureInfo.InvariantCulture)));
+        return commits;
+    }
+
+    public async Task<IReadOnlyList<GitCommitFile>> CommitFilesAsync(string path, string hash, CancellationToken cancellation = default)
+    {
+        ValidateCommitHash(hash);
+        // Merge commits show their changes against the first parent; root commits show all added files.
+        var result = await ExecuteAsync(path, ["show", "--no-color", "--no-notes", "--no-show-signature", "--format=", "--name-status", "-z", "--find-renames", "--first-parent", "--diff-merges=first-parent", "--root", "--no-ext-diff", "--no-textconv", hash, "--"], null, cancellation);
+        if (!result.Success) throw new IOException(result.Output);
+        var entries = result.Output.Split('\0'); var files = new List<GitCommitFile>();
+        for (var i = 0; i + 1 < entries.Length;)
+        {
+            var status = entries[i++]; if (status.Length == 0) continue;
+            var name = entries[i++]; string? original = null;
+            if (status[0] is 'R' or 'C' && i < entries.Length) { original = name; name = entries[i++]; }
+            files.Add(new(name, original, status[0]));
+        }
+        return files;
+    }
+
+    public async Task<string> CommitDiffAsync(string path, string hash, GitCommitFile file, CancellationToken cancellation = default)
+    {
+        ValidateCommitHash(hash);
+        // History paths are repository-relative, even when the project is opened at a subfolder.
+        var paths = file.OriginalPath is null ? new[] { file.Path } : new[] { file.Path, file.OriginalPath };
+        var result = await ExecuteAsync(path, ["show", "--no-color", "--no-notes", "--no-show-signature", "--format=", "--patch", "--find-renames", "--first-parent", "--diff-merges=first-parent", "--root", "--no-ext-diff", "--no-textconv", hash, "--", .. paths.Select(name => ":(top,literal)" + name)], null, cancellation);
+        if (!result.Success) throw new IOException(result.Output);
+        return result.Output.Length == 0 ? "No text differences for this file in this commit." : result.Output;
+    }
+
+    private static void ValidateCommitHash(string hash)
+    {
+        if (hash.Length is not (40 or 64) || !hash.All(char.IsAsciiHexDigit)) throw new ArgumentException("Use a full commit hash.", nameof(hash));
+    }
 
     public async Task<IReadOnlyList<GitFileChange>> ChangesAsync(string path, CancellationToken cancellation = default)
     {
@@ -93,6 +145,31 @@ public sealed class GitService
             var stage = await GitAsync(path, ["add", "--all"], output, cancellation);
             if (!stage.Success) return stage;
             return await GitAsync(path, ["commit", "-m", message], output, cancellation);
+        }
+        finally { gate.Release(); }
+    }
+
+    public async Task<CommandResult> CommitAllAndSyncAsync(string path, string message, Action<string>? output = null,
+        CancellationToken cancellation = default)
+    {
+        if (string.IsNullOrWhiteSpace(message)) throw new ArgumentException("Enter a commit message.", nameof(message));
+        var gate = locks.GetOrAdd(System.IO.Path.GetFullPath(path), _ => new(1));
+        await gate.WaitAsync(cancellation);
+        try
+        {
+            string[][] commands = [["add", "--all"], ["commit", "-m", message], ["pull"], ["push"]];
+            var result = new CommandResult(0, "");
+            foreach (var args in commands)
+            {
+                output?.Invoke("git " + (args[0] == "add" ? "add --all" : args[0]));
+                result = await GitAsync(path, args, output, cancellation);
+                if (!result.Success)
+                {
+                    output?.Invoke($"git {args[0]} failed · exit {result.ExitCode}");
+                    return new(result.ExitCode, $"git {args[0]} failed:{Environment.NewLine}{result.Output}");
+                }
+            }
+            return result;
         }
         finally { gate.Release(); }
     }

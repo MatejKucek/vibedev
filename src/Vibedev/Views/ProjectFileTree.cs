@@ -49,9 +49,8 @@ public sealed class ProjectFileTree : UserControl
         var selected = (tree.SelectedItem as TreeViewItem)?.Tag as string;
         tree.Items.Clear();
         if (!Directory.Exists(directory)) { tree.Items.Add(Ui.Text("Project directory is unavailable.", 12, "#F87171")); return; }
-        var root = Node(directory, true);
-        tree.Items.Add(root); root.IsExpanded = true;
-        Restore(root, expanded, selected);
+        AddChildren(tree.Items, directory);
+        foreach (var node in tree.Items.OfType<TreeViewItem>()) Restore(node, expanded, selected);
     }
     private void Restore(TreeViewItem node, HashSet<string> expanded, string? selected)
     {
@@ -106,21 +105,21 @@ public sealed class ProjectFileTree : UserControl
             node.Expanded += (_, e) =>
             {
                 if (!ReferenceEquals(e.OriginalSource, node)) return;
-                if (node.Items.Count == 1 && node.Items[0] is string) { node.Items.Clear(); AddChildren(node, path); }
+                if (node.Items.Count == 1 && node.Items[0] is string) { node.Items.Clear(); AddChildren(node.Items, path); }
                 folderIcon!.Data = Geometry.Parse("M1,5 L7,5 L9,7 L18,7 L15,15 L1,15 Z M1,5 L1,3 L7,3 L9,5 L16,5 L16,7");
             };
             node.Collapsed += (_, e) => { if (ReferenceEquals(e.OriginalSource, node)) folderIcon!.Data = Geometry.Parse("M1,3 L7,3 L9,5 L17,5 L17,14 L1,14 Z"); };
         }
         return node;
     }
-    private void AddChildren(TreeViewItem parent, string path)
+    private void AddChildren(ItemCollection items, string path)
     {
         try
         {
-            foreach (var dir in Directory.EnumerateDirectories(path).Where(Visible).OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)) parent.Items.Add(Node(dir, true));
-            foreach (var file in Directory.EnumerateFiles(path).Where(Visible).OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)) parent.Items.Add(Node(file, false));
+            foreach (var dir in Directory.EnumerateDirectories(path).Where(Visible).OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)) items.Add(Node(dir, true));
+            foreach (var file in Directory.EnumerateFiles(path).Where(Visible).OrderBy(Path.GetFileName, StringComparer.OrdinalIgnoreCase)) items.Add(Node(file, false));
         }
-        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { parent.Items.Add(Ui.Text(ex.Message, 11, "#F87171")); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { items.Add(Ui.Text(ex.Message, 11, "#F87171")); }
     }
     private static bool Visible(string path) => !Path.GetFileName(path).Equals(".git", StringComparison.OrdinalIgnoreCase);
 
@@ -128,16 +127,19 @@ public sealed class ProjectFileTree : UserControl
     {
         var relative = Path.GetRelativePath(directory, Path.GetFullPath(file));
         if (Path.IsPathRooted(relative) || relative == ".." || relative.StartsWith(".." + Path.DirectorySeparatorChar, StringComparison.Ordinal)) return;
-        if (tree.Items.OfType<TreeViewItem>().FirstOrDefault() is not { } node) return;
-        var current = directory; node.IsExpanded = true;
+        var items = tree.Items;
+        TreeViewItem? node = null;
+        var current = directory;
         foreach (var part in relative.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar))
         {
             current = Path.Combine(current, part);
-            var next = node.Items.OfType<TreeViewItem>().FirstOrDefault(n => string.Equals(n.Tag as string, current, StringComparison.OrdinalIgnoreCase));
+            var next = items.OfType<TreeViewItem>().FirstOrDefault(n => string.Equals(n.Tag as string, current, StringComparison.OrdinalIgnoreCase));
             if (next is null) return;
             node = next;
             if (Directory.Exists(current)) node.IsExpanded = true;
+            items = node.Items;
         }
+        if (node is null) return;
         node.IsSelected = true; if (IsVisible) node.BringIntoView();
     }
 }

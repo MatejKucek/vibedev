@@ -46,7 +46,7 @@ internal static partial class Program
         Check(fromSidebar.IsFloating && window.OpenProjects.Count == 2 && window.Dashboard.DisplayedProjects.Count == 2, "A closed sidebar project opens directly in a floating panel and appears on the dashboard");
         window.SaveWorkspace();
         new XmlLayoutSerializer(window.Dock).Serialize(Path.Combine(root, "state", "layout.xml"));
-        var restored = new MainWindow(Path.Combine(root, "state")) { ShowActivated = false }; restored.Show();
+        var restored = new MainWindow(Path.Combine(root, "state")) { ShowActivated = false, WindowState = WindowState.Normal }; restored.Show();
         await Task.Delay(600);
         Check(restored.Documents().Count(d => d.Content is ProjectView) == 2 && restored.Dock.Layout.FloatingWindows.Count == 1,
             "Dragged project panels restore with their floating layout");

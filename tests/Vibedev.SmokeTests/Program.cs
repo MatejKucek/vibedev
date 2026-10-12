@@ -24,7 +24,10 @@ internal static partial class Program
         app.DispatcherUnhandledException += (_, e) => { Results.Add("FAIL: " + e.Exception); Finish(1); e.Handled = true; };
         var root = Path.Combine(Path.GetTempPath(), "Vibedev-ui-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
-        var window = new MainWindow(Path.Combine(root, "state")) { ShowActivated = false };
+        // WPF requires activation when initially showing a maximized window.
+        var sessionReader = args.Contains("--claude-sessions") ? new ClaudeSessionReader(Path.Combine(root, "claude-sessions"), (pid, _) => pid == 10) : null;
+        var window = new MainWindow(Path.Combine(root, "state"), sessionReader) { ShowActivated = args.Contains("--tasks") };
+        if (!window.ShowActivated) window.WindowState = WindowState.Normal;
         var started = false;
         window.ContentRendered += async (_, _) =>
         {
@@ -34,6 +37,10 @@ internal static partial class Program
                 if (args.Contains("--project-drag")) await ExecuteProjectDragAsync(window, root);
                 else if (args.Contains("--dashboard")) await ExecuteDashboardAsync(window, root);
                 else if (args.Contains("--context-menu")) await ExecuteProjectContextMenusAsync(window, root);
+                else if (args.Contains("--tasks")) await ExecuteProjectTasksAsync(window, root);
+                else if (args.Contains("--git-sync")) await ExecuteGitSyncAsync(window, root);
+                else if (args.Contains("--git-history")) await ExecuteGitHistoryAsync(window, root);
+                else if (args.Contains("--claude-sessions")) await ExecuteClaudeSessionsAsync(window, root);
                 else await ExecuteAsync(window, root);
                 Finish(0);
             }
@@ -92,14 +99,14 @@ internal static partial class Program
         ((ProjectView)window.Documents().Single(d => d.Content is ProjectView v && v.Project == window.Projects[1]).Content).CloseProjectButton.RaiseEvent(new RoutedEventArgs(Button.ClickEvent));
         Check(window.Dashboard.DisplayedProjects.Count == 1, "Closing a project panel immediately removes its dashboard card");
         firstDoc.IsActive = true;
-        var fileRoot = firstView.FileTree.Tree.Items.OfType<TreeViewItem>().Single();
-        var sourceFolder = fileRoot.Items.OfType<TreeViewItem>().Single(n => n.Tag as string == Path.Combine(repo, "src"));
+        var fileItems = firstView.FileTree.Tree.Items;
+        Check(!fileItems.OfType<TreeViewItem>().Any(n => n.Tag as string == repo) && fileItems.OfType<TreeViewItem>().Any(n => n.Tag as string == file), "File tree shows project contents without a root folder row or parent indentation");
+        var sourceFolder = fileItems.OfType<TreeViewItem>().Single(n => n.Tag as string == Path.Combine(repo, "src"));
         sourceFolder.IsExpanded = true;
         Check(sourceFolder.Items.OfType<TreeViewItem>().Any(n => n.Tag as string == nestedFile), "File tree expands folders to show nested files");
-        Check(!fileRoot.Items.OfType<TreeViewItem>().Any(n => Path.GetFileName(n.Tag as string) == ".git"), "File tree keeps Git metadata out of project navigation");
+        Check(!fileItems.OfType<TreeViewItem>().Any(n => Path.GetFileName(n.Tag as string) == ".git"), "File tree keeps Git metadata out of project navigation");
         firstView.FileTree.Reveal(nestedFile); firstView.RefreshTree();
-        fileRoot = firstView.FileTree.Tree.Items.OfType<TreeViewItem>().Single();
-        sourceFolder = fileRoot.Items.OfType<TreeViewItem>().Single(n => n.Tag as string == Path.Combine(repo, "src"));
+        sourceFolder = fileItems.OfType<TreeViewItem>().Single(n => n.Tag as string == Path.Combine(repo, "src"));
         Check(sourceFolder.IsExpanded && (firstView.FileTree.Tree.SelectedItem as TreeViewItem)?.Tag as string == nestedFile, "Refreshing the file tree preserves folder expansion and selected file");
         await firstView.OpenFileAsync(file); await firstView.OpenFileAsync(file);
         Check(firstView.Editors.Count() == 1, "Opening a file twice activates its existing tab");
@@ -292,7 +299,7 @@ internal static partial class Program
         window.SaveWorkspace();
         var layoutPath = Path.Combine(root, "state", "layout.xml"); new AvalonDock.Serializer.Xml.XmlLayoutSerializer(window.Dock).Serialize(layoutPath);
         var saved = new WorkspaceStore(Path.Combine(root, "state")).Load(); Check(saved.PanelProjects.Count == 3, "Project panels persist with stable IDs");
-        var restored = new MainWindow(Path.Combine(root, "state")) { ShowActivated = false }; restored.Show();
+        var restored = new MainWindow(Path.Combine(root, "state")) { ShowActivated = false, WindowState = WindowState.Normal }; restored.Show();
         await Task.Delay(800);
         Check(restored.Documents().Count(d => d.Content is ProjectView) == 3, "All project panels restore after reopening");
         Check(restored.Dock.Layout.FloatingWindows.Count > 0, "Floating window layout restores");

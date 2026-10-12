@@ -14,6 +14,7 @@ public sealed class ProjectView : UserControl, IDisposable
     private readonly TabControl navigation = new();
     private readonly ProjectSearchView search;
     private readonly ProjectGitView gitView;
+    private readonly ProjectTasksView tasksView;
     private readonly TabControl tabs = new();
     private readonly CSharpLanguageService language;
     private readonly ProjectFileMonitor? monitor;
@@ -29,6 +30,7 @@ public sealed class ProjectView : UserControl, IDisposable
     public Action? CloseRequested { get; set; }
     internal Action<Point>? DragRequested { get; set; }
     internal TextBlock ProjectTitle { get; }
+    internal TextBlock TaskCount { get; } = Ui.Text("0 tasks", 11, "#C4B5DB");
     internal Button CloseProjectButton { get; }
     public LaunchConfiguration? SelectedLaunch => launches.SelectedItem as LaunchConfiguration;
     internal ProjectFileTree FileTree => tree;
@@ -44,17 +46,19 @@ public sealed class ProjectView : UserControl, IDisposable
         tree.FileActivated += async path => await OpenFileAsync(path);
         search = new(this);
         gitView = new(main, this);
+        tasksView = new(project.Entry.Path, OpenFileAsync, RefreshTasks);
         tabs.Style = (Style)Application.Current.FindResource(typeof(TabControl));
         var root = new Grid(); root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new());
         var header = new Grid(); header.ColumnDefinitions.Add(new() { Width = new(1, GridUnitType.Star), MinWidth = 180, MaxWidth = 360 }); header.ColumnDefinitions.Add(new() { Width = GridLength.Auto }); header.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         var identity = new Grid { VerticalAlignment = VerticalAlignment.Center, Margin = new(0, 0, 12, 0) };
-        identity.ColumnDefinitions.Add(new() { Width = GridLength.Auto, MaxWidth = 160 }); identity.ColumnDefinitions.Add(new());
+        identity.ColumnDefinitions.Add(new() { Width = GridLength.Auto, MaxWidth = 160 }); identity.ColumnDefinitions.Add(new() { Width = GridLength.Auto }); identity.ColumnDefinitions.Add(new());
         ProjectTitle = Ui.Text(project.Entry.Name, 16);
         ProjectTitle.FontWeight = FontWeights.SemiBold; ProjectTitle.TextWrapping = TextWrapping.NoWrap; ProjectTitle.TextTrimming = TextTrimming.CharacterEllipsis;
         ProjectTitle.Margin = new(0, 0, 10, 0); ProjectTitle.VerticalAlignment = VerticalAlignment.Center; ProjectTitle.ToolTip = project.Entry.Path + "\nDrag the name to move or dock this panel\nRight-click for Git, float/dock, close and panel layout actions";
         ProjectDragHandle.Attach(ProjectTitle, point => DragRequested?.Invoke(point));
         identity.Children.Add(ProjectTitle);
-        var projectPath = Ui.Text(project.Entry.Path, 11, "#B0A5C3"); projectPath.TextWrapping = TextWrapping.NoWrap; projectPath.TextTrimming = TextTrimming.CharacterEllipsis; projectPath.VerticalAlignment = VerticalAlignment.Center; projectPath.ToolTip = project.Entry.Path; Grid.SetColumn(projectPath, 1); identity.Children.Add(projectPath);
+        TaskCount.Margin = new(0, 0, 10, 0); TaskCount.VerticalAlignment = VerticalAlignment.Center; TaskCount.TextWrapping = TextWrapping.NoWrap; TaskCount.ToolTip = Path.Combine(project.Entry.Path, "tasks", "open"); Grid.SetColumn(TaskCount, 1); identity.Children.Add(TaskCount);
+        var projectPath = Ui.Text(project.Entry.Path, 11, "#B0A5C3"); projectPath.TextWrapping = TextWrapping.NoWrap; projectPath.TextTrimming = TextTrimming.CharacterEllipsis; projectPath.VerticalAlignment = VerticalAlignment.Center; projectPath.ToolTip = project.Entry.Path; Grid.SetColumn(projectPath, 2); identity.Children.Add(projectPath);
         header.Children.Add(identity);
         CloseProjectButton = Ui.Button("×", () => CloseRequested?.Invoke()); CloseProjectButton.Padding = new(8, 4, 8, 4); CloseProjectButton.Margin = new(0); CloseProjectButton.VerticalAlignment = VerticalAlignment.Center; CloseProjectButton.ToolTip = "Close project panel"; Grid.SetColumn(CloseProjectButton, 2); header.Children.Add(CloseProjectButton);
         var headerScroll = new ScrollViewer { Content = header, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled };
@@ -74,7 +78,13 @@ public sealed class ProjectView : UserControl, IDisposable
         navigation.Items.Add(new TabItem { Header = "EXPLORER", Content = explorer, ToolTip = "Browse project files", Style = (Style)Application.Current.FindResource(typeof(TabItem)), Padding = new Thickness(10, 8, 10, 8) });
         navigation.Items.Add(new TabItem { Header = "SEARCH", Content = search, ToolTip = "Search files and contents (Ctrl+Shift+F), or filenames (Ctrl+P)", Style = (Style)Application.Current.FindResource(typeof(TabItem)), Padding = new Thickness(10, 8, 10, 8) });
         navigation.Items.Add(new TabItem { Header = "GIT", Content = gitView, ToolTip = "Review diffs, stage files and commit changes", Style = (Style)Application.Current.FindResource(typeof(TabItem)), Padding = new Thickness(10, 8, 10, 8) });
-        navigation.SelectionChanged += async (_, e) => { if (ReferenceEquals(e.Source, navigation) && navigation.SelectedIndex == 2) await gitView.RefreshAsync(); };
+        navigation.Items.Add(new TabItem { Header = "TASKS", Content = tasksView, ToolTip = "Open task files in tasks/open", Style = (Style)Application.Current.FindResource(typeof(TabItem)), Padding = new Thickness(10, 8, 10, 8) });
+        navigation.SelectionChanged += async (_, e) =>
+        {
+            if (!ReferenceEquals(e.Source, navigation)) return;
+            if (navigation.SelectedIndex == 2) await gitView.RefreshAsync();
+            if (navigation.SelectedItem is TabItem { Content: ProjectTasksView }) RefreshTasks();
+        };
         navigation.SelectedIndex = 0; work.Children.Add(navigation);
         var splitter = new GridSplitter { Width = 4, HorizontalAlignment = HorizontalAlignment.Stretch }; Grid.SetColumn(splitter, 1); work.Children.Add(splitter);
         var editing = new Grid(); editing.Children.Add(tabs); placeholder.TextAlignment = TextAlignment.Center; placeholder.HorizontalAlignment = HorizontalAlignment.Center; placeholder.VerticalAlignment = VerticalAlignment.Center; editing.Children.Add(placeholder); Grid.SetColumn(editing, 2); work.Children.Add(editing);
@@ -102,7 +112,12 @@ public sealed class ProjectView : UserControl, IDisposable
         gitView.RefreshStatus();
         if (navigation.SelectedIndex == 2) _ = gitView.RefreshAsync();
     }
-    public void RefreshTree() => tree.Refresh();
+    public void RefreshTree() { tree.Refresh(); RefreshTasks(); }
+    private void RefreshTasks()
+    {
+        try { var count = tasksView.Refresh(); TaskCount.Text = count == 1 ? "1 task" : $"{count} tasks"; main.UpdateOpenTaskCount(Project, count); }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { main.Log($"[{Project.Entry.Name}] Cannot read open tasks: {ex.Message}"); }
+    }
     public void ShowExplorer() => navigation.SelectedIndex = 0;
     internal void ShowGit() => navigation.SelectedIndex = 2;
     public void ShowSearch(bool filenames = false) { navigation.SelectedIndex = 1; search.FocusSearch(filenames); }
@@ -174,10 +189,22 @@ public sealed class ProjectView : UserControl, IDisposable
         var diff = new GitDiffTab(key, Path.GetFileName(file.Path) + (staged ? " · staged diff" : " · diff"), text, file, staged, t => { tabs.Items.Remove(t); placeholder.Visibility = tabs.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed; });
         tabs.Items.Add(diff); tabs.SelectedItem = diff; placeholder.Visibility = Visibility.Collapsed;
     }
+    internal async Task ShowCommitDiffAsync(GitCommit commit, GitCommitFile file, CancellationToken cancellation = default)
+    {
+        var key = $"{commit.Hash}:{file.Path} [commit]";
+        var existing = tabs.Items.OfType<GitDiffTab>().FirstOrDefault(t => t.Key == key);
+        if (existing is not null) { tabs.SelectedItem = existing; return; }
+        var text = await main.Git.CommitDiffAsync(Project.Entry.Path, commit.Hash, file, cancellation);
+        if (disposed) return;
+        existing = tabs.Items.OfType<GitDiffTab>().FirstOrDefault(t => t.Key == key);
+        if (existing is not null) { tabs.SelectedItem = existing; return; }
+        var diff = new GitDiffTab(key, $"{Path.GetFileName(file.Path)} · {commit.ShortHash} diff", text, null, false, t => { tabs.Items.Remove(t); placeholder.Visibility = tabs.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed; });
+        tabs.Items.Add(diff); tabs.SelectedItem = diff; placeholder.Visibility = Visibility.Collapsed;
+    }
     internal async Task RefreshSelectedDiffAsync(IReadOnlyList<GitFileChange> files)
     {
-        if (disposed || tabs.SelectedItem is not GitDiffTab diff) return;
-        var current = files.FirstOrDefault(f => f.Path.Equals(diff.Change.Path, StringComparison.OrdinalIgnoreCase));
+        if (disposed || tabs.SelectedItem is not GitDiffTab { Change: { } change } diff) return;
+        var current = files.FirstOrDefault(f => f.Path.Equals(change.Path, StringComparison.OrdinalIgnoreCase));
         var text = current is null || (diff.Staged ? !current.Staged : !current.Unstaged)
             ? diff.Staged ? "No staged changes for this file." : "No unstaged changes for this file."
             : await main.Git.DiffAsync(Project.Entry.Path, current, diff.Staged);

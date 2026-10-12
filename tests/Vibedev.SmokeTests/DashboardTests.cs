@@ -51,7 +51,7 @@ internal static partial class Program
         var pane = (LayoutDocumentPane)first.Parent; pane.Children.Add(legacy); legacy.IsSelected = true; legacy.IsActive = true;
         var layoutPath = Path.Combine(root, "state", "layout.xml");
         new XmlLayoutSerializer(window.Dock).Serialize(layoutPath);
-        var restored = new MainWindow(Path.Combine(root, "state")) { ShowActivated = false }; restored.Show(); await Task.Delay(600);
+        var restored = new MainWindow(Path.Combine(root, "state")) { ShowActivated = false, WindowState = WindowState.Normal }; restored.Show(); await Task.Delay(600);
         CheckDashboardAboveProjects(restored);
         Check(restored.Documents().Count() == 4 && restored.Documents().All(d => ((ProjectView)d.Content).IsVisible),
             "Restoring an old dashboard tab reveals every project quadrant");
@@ -62,7 +62,7 @@ internal static partial class Program
         ((LayoutDocumentPane)group.Children[0]).Children.Add(legacy);
         window.Dock.Layout.RootPanel.Children.Add(group);
         new XmlLayoutSerializer(window.Dock).Serialize(layoutPath);
-        var restoredSplit = new MainWindow(Path.Combine(root, "state")) { ShowActivated = false }; restoredSplit.Show(); await Task.Delay(600);
+        var restoredSplit = new MainWindow(Path.Combine(root, "state")) { ShowActivated = false, WindowState = WindowState.Normal }; restoredSplit.Show(); await Task.Delay(600);
         CheckDashboardAboveProjects(restoredSplit);
         Check(restoredSplit.Dock.Layout.Descendents().OfType<LayoutDocumentPane>().Count() == 4,
             "Restoring an old dashboard-only split removes its empty pane");

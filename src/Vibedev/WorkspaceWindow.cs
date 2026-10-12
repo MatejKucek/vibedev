@@ -31,6 +31,9 @@ public partial class MainWindow : Window
     private readonly List<(int Offset, string Directory)> outputContexts = [];
     private readonly DispatcherTimer refreshTimer;
     private readonly DispatcherTimer fileStatusTimer;
+    private readonly DispatcherTimer claudeTimer;
+    private readonly ClaudeSessionReader claudeSessions;
+    private bool readingClaude;
     private bool closing, checkingClose, listing, refreshing, pulling, loaded;
     private CancellationTokenSource operations = new();
     public List<ProjectState> Projects { get; } = [];
@@ -44,8 +47,9 @@ public partial class MainWindow : Window
     internal DashboardView Dashboard => dashboard;
 
     public MainWindow() : this(null) { }
-    public MainWindow(string? stateDirectory)
+    public MainWindow(string? stateDirectory, ClaudeSessionReader? claudeSessions = null)
     {
+        this.claudeSessions = claudeSessions ?? new();
         InitializeComponent();
         store = new(stateDirectory ?? Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Vibedev"));
         try { state = store.Load(); }
@@ -107,6 +111,7 @@ public partial class MainWindow : Window
                 if (state.OpenFiles.TryGetValue(id, out var paths))
                     foreach (var path in paths.Where(File.Exists)) await view.OpenFileAsync(path);
             await RefreshStatusesAsync();
+            await RefreshClaudeSessionsAsync();
         };
         Closing += Window_Closing;
         PreviewKeyDown += (_, e) =>
@@ -117,6 +122,47 @@ public partial class MainWindow : Window
         refreshTimer = new(TimeSpan.FromSeconds(15), DispatcherPriority.Background, async (_, _) => await RefreshStatusesAsync(), Dispatcher);
         fileStatusTimer = new(TimeSpan.FromMilliseconds(750), DispatcherPriority.Background, async (_, _) => { fileStatusTimer!.Stop(); await RefreshStatusesAsync(); }, Dispatcher);
         fileStatusTimer.Stop();
+        claudeTimer = new(TimeSpan.FromSeconds(2), DispatcherPriority.Background, async (_, _) => await RefreshClaudeSessionsAsync(), Dispatcher);
+    }
+    internal async Task RefreshClaudeSessionsAsync()
+    {
+        if (readingClaude || closing || !loaded) return;
+        readingClaude = true;
+        var projects = Projects.ToArray();
+        try
+        {
+            var updates = await Task.Run(() =>
+            {
+                var snapshot = claudeSessions.Read();
+                return projects.Select(project => (Project: project,
+                    Sessions: ClaudeProjectMatcher.Match(project.Entry.Path, snapshot.Sessions), snapshot.Warning)).ToArray();
+            });
+            if (closing) return;
+            var changed = false;
+            foreach (var update in updates)
+            {
+                if (!Projects.Contains(update.Project)) continue;
+                var activity = update.Project.Claude;
+                changed |= !activity.Sessions.SequenceEqual(update.Sessions) || activity.Warning != update.Warning;
+                activity.Update(update.Sessions, update.Warning);
+            }
+            if (changed) dashboard.Refresh();
+        }
+        catch (Exception ex)
+        {
+            if (!closing)
+            {
+                foreach (var project in projects) project.Claude.Update(project.Claude.Sessions, "Cannot refresh Claude sessions: " + ex.Message);
+                dashboard.Refresh();
+            }
+        }
+        finally { readingClaude = false; }
+    }
+    internal void UpdateOpenTaskCount(ProjectState project, int count)
+    {
+        if (project.OpenTaskCount == count) return;
+        project.OpenTaskCount = count;
+        if (!closing) dashboard.Refresh();
     }
     private void ConfigureProjectPanes()
     {
@@ -375,7 +421,7 @@ public partial class MainWindow : Window
         catch (OperationCanceledException) { }
         catch (Exception ex) { Ui.Error(ex.Message, this); }
     }
-    public async void RefreshStatuses() => await RefreshStatusesAsync();
+    public async void RefreshStatuses() { await RefreshStatusesAsync(); await RefreshClaudeSessionsAsync(); }
     internal void ScheduleGitRefresh() { if (!closing) { fileStatusTimer.Stop(); fileStatusTimer.Start(); } }
     internal async Task<bool> SaveProjectFilesAsync(ProjectState project, IEnumerable<string> paths)
     {
@@ -430,24 +476,28 @@ public partial class MainWindow : Window
     }
     internal async Task<bool> GitActionAsync(ProjectState project, string action, string? message = null)
     {
-        if (project.Busy) return false;
+        if (project.Busy || closing) return false;
         project.Busy = true; project.Activity = action + "…"; project.Failed = false; Redraw(); SetTerminalVisible(true); BottomTabs.SelectedIndex = 1;
         Log($"[{project.Entry.Name}] git {action}");
         try
         {
+            if (action == "sync")
+                foreach (var view in views.Values.Where(v => v.Project == project).ToArray())
+                    if (!await view.SaveAllAsync()) { project.Activity = "sync cancelled · save cancelled"; Log($"[{project.Entry.Name}] {project.Activity}"); return false; }
             Action<string> output = line => Log($"[{project.Entry.Name}] {line}");
             var result = action switch
             {
                 "pull" => await git.PullAsync(project.Entry.Path, output, operations.Token),
                 "push" => await git.PushAsync(project.Entry.Path, output, operations.Token),
                 "commit" => await git.CommitAllAsync(project.Entry.Path, message!, output, operations.Token),
+                "sync" => await git.CommitAllAndSyncAsync(project.Entry.Path, message!, output, operations.Token),
                 _ => throw new ArgumentException("Unknown Git action.")
             };
             project.Failed = !result.Success;
             project.Activity = result.Success ? $"{action} completed" : $"{action} failed · exit {result.ExitCode}";
             Log($"[{project.Entry.Name}] {project.Activity}");
             project.Git = await git.StatusAsync(project.Entry.Path, operations.Token);
-            if (action == "pull")
+            if (action is "pull" or "sync")
                 foreach (var view in views.Values.Where(v => v.Project == project).ToArray())
                 {
                     view.RefreshTree(); view.LoadLaunches();
@@ -587,7 +637,7 @@ public partial class MainWindow : Window
                 var temp = store.LayoutPath + ".tmp"; new XmlLayoutSerializer(Dock).Serialize(temp); File.Move(temp, store.LayoutPath, true);
             }
             catch (Exception ex) { Log("Layout save failed: " + ex.Message); }
-            closing = true; refreshTimer.Stop(); fileStatusTimer.Stop(); operations.Cancel(); foreach (var view in views.Values) view.Dispose(); terminal.Dispose(); _ = Dispatcher.BeginInvoke(Close);
+            closing = true; refreshTimer.Stop(); fileStatusTimer.Stop(); claudeTimer.Stop(); operations.Cancel(); foreach (var view in views.Values) view.Dispose(); terminal.Dispose(); _ = Dispatcher.BeginInvoke(Close);
         }
         finally { checkingClose = false; }
     }

@@ -10,10 +10,10 @@ namespace Vibedev.Views;
 internal sealed class GitDiffTab : TabItem
 {
     public string Key { get; }
-    public GitFileChange Change { get; }
+    public GitFileChange? Change { get; }
     public bool Staged { get; }
     internal TextEditor Editor { get; }
-    public GitDiffTab(string key, string name, string diff, GitFileChange change, bool staged, Action<GitDiffTab> close)
+    public GitDiffTab(string key, string name, string diff, GitFileChange? change, bool staged, Action<GitDiffTab> close)
     {
         Key = key; Change = change; Staged = staged; Style = (Style)Application.Current.FindResource(typeof(TabItem));
         var button = Ui.Button("×", () => close(this)); button.Padding = new(4, 0, 4, 0); button.ToolTip = "Close diff";

@@ -10,7 +10,11 @@ dotnet run --project src/Vibedev
 
 Requires Windows 10 version 2004 or later, the .NET 10 SDK, Git on PATH, and Microsoft Edge WebView2 Runtime. Terminal assets are bundled; Node is only needed to regenerate them.
 
-To create a portable, self-contained Windows x64 build:
+The app starts maximized.
+
+Double-click **Build Vibedev.bat** to create a portable, self-contained Windows x64 build in `artifacts/Vibedev`. Then use **Run Vibedev.bat** to launch it. The build script requires the .NET 10 SDK and works from any current directory.
+
+Or build from the command line:
 
 ```powershell
 dotnet publish src/Vibedev -c Release -r win-x64 --self-contained true -o artifacts/Vibedev
@@ -25,6 +29,8 @@ Run `artifacts/Vibedev/Vibedev.exe`. Keep the whole published folder together. G
 - Click a project in the sidebar or dashboard to open its panel. Filter using the sidebar field.
 - Click and hold a project name, then drag to move its panel. Drop on a docking target to arrange it beside another panel, or elsewhere to leave it as a floating window. Drag a project out of the sidebar to create a new window, including another window for an already open project. A click without dragging still opens the existing panel.
 - The compact dashboard shows open projects in small frames without numbers, in panel order, with their branch and whether they have changes, including background panels, splits and floating windows. Closing a project's last panel removes its frame; it stays registered in the sidebar. **Pull all** lives on the dashboard and includes all registered projects.
+- Each dashboard frame has a Claude activity light: **gray** means no activity observed, **red** means open Markdown tasks in `tasks/open` with no activity, **blue** means Claude is busy, **orange** means Claude needs permission or input, and **green** means previously observed activity has stopped. Green remains even with open tasks, until another run starts; its history lasts for the current Vibedev app run. When several sessions match, waiting takes precedence over busy. Hover the light for session names, folders, waiting reasons and read errors.
+- Claude session metadata is read from `%USERPROFILE%/.claude/sessions/*.json` (or `sessions` under `CLAUDE_CONFIG_DIR`) every two seconds. Matches use the project folder and its subfolders, or the same Git common directory for linked worktrees, including worktrees outside the project folder. Nested independent repositories and separate clones do not match solely by a shared parent or remote. Process names and recorded creation times filter stale records and reused process IDs. Temporary partial writes preserve the last verified state. No MCP server, port, authentication keys or conversation transcripts are needed.
 - The dashboard has its own row above the project workspace. Opening, splitting, docking and floating projects never replace it or use its space. The activity-rail button shows or hides this row and lights up while it is visible. Dashboard visibility is remembered; older layouts automatically move the dashboard out of project panes.
 - Hide or show the Projects sidebar with the activity-rail button or `Ctrl+B`; its close button also hides it. Visibility and width are remembered.
 - **Split → / Split ↓** opens a project beside the current panel; repeat inside either pane to nest layouts. A project can appear in multiple panels.
@@ -40,11 +46,13 @@ Double-click an explorer file to open it. Edits autosave after 800 ms without ty
 
 C# files use [csharp-ls](https://github.com/razzmatazz/csharp-language-server) for member completion (`Ctrl+Space` or typing `.`), error/warning underlines, hover information and go-to-definition (`F12`). Changes are synchronized before saving. Click **C# server** in a project panel to install version 0.26.0 into `%LOCALAPPDATA%/Vibedev/LanguageServer`, or to retry after a server failure. Installation requires the .NET 10 SDK and NuGet access. An existing global/PATH installation is also detected. Server startup and failures appear in task output; each panel owns and disposes its own session. VS Code extensions and debugger breakpoints are not implemented.
 
-Each project panel has **Explorer**, **Search** and **Git** tabs. `Ctrl+Shift+F` opens project search; `Ctrl+P` opens filename search. Choose filenames, file contents or both. Results include unsaved text in that panel's editors, and double-clicking a result opens its matching line. Search respects Git ignore rules, skips binary files, build/dependency folders and directory links, and limits results to 500 matches. The file tree uses folder/file icons, nested indentation and full-row selection; refreshing preserves expanded folders and the selected file.
+Each project panel has **Explorer**, **Search**, **Git** and **Tasks** tabs. **Tasks** lists Markdown files in the project's `tasks/open` folder and all its subfolders, showing relative paths; click a task to open it in the main file editor. The count beside the project name and the task list update automatically as files are added, renamed or removed. `Ctrl+Shift+F` opens project search; `Ctrl+P` opens filename search. Choose filenames, file contents or both. Results include unsaved text in that panel's editors, and double-clicking a result opens its matching line. Search respects Git ignore rules, skips binary files, build/dependency folders and directory links, and limits results to 500 matches. The file tree shows the project folder's contents without a root row or its extra indentation, with folder/file icons, nested indentation and full-row selection; refreshing preserves expanded folders and the selected file.
 
 UTF-8, UTF-16 and UTF-32 with supported BOMs are preserved, along with line endings. Binary files and files over 8 MB are refused. Saving detects external changes and asks before overwriting them. A debounced file watcher updates the tree after creates, renames and deletions and reloads clean editors after external changes. Dirty buffers are preserved. Deleted open files remain available in their tabs; saving them requires explicit overwrite confirmation.
 
-The **Git** tab shows branch/status and separate **Staged** and **Changes** lists. Click a file to open a colored unified diff. Ctrl/Shift+click selects multiple files; **+ Selected** saves and stages only those files, and **− Selected** unstages them while preserving working copies. Enter a message and **Commit staged** to commit the index. **Pull** and **Push** are explicit actions in the Git tab. Git-ignored files stay excluded.
+The **Git** tab shows branch/status and separate **Staged** and **Changes** lists. Click a file to open a colored unified diff. Ctrl/Shift+click selects multiple files; **+ Selected** saves and stages only those files, and **− Selected** unstages them while preserving working copies. Enter a message and click **Commit all, pull & push** to save open editor files, stage all changes, commit, pull and push in order. The action stops at the first failure and keeps the message for reference; details appear in **Git & Task Output**. **Commit staged** commits only the index, and separate **Pull** and **Push** actions remain available. Git-ignored files stay excluded.
+
+Use the **Changes / Recent commits** switch at the top of the Git tab to browse the latest 100 commits on the current branch. Click a commit or its arrow to expand a sublist of changed files with their change statuses; renamed files show both paths. Double-click a changed file (or select it and press Enter) to open a read-only diff against the commit's parent in the main file panel. Each file and commit gets its own tab; opening it again activates the existing tab. Hover a commit for its author, date and full hash. Merge commits list changes against their first parent. Refreshing preserves expanded commits and historical diffs, and switching back preserves the draft commit message.
 
 **Pull all** runs ordinary `git pull` for each project using existing Git configuration, credentials and credential helpers. It attempts pulls with local changes, without stashing. One failure does not stop the remaining projects. Results appear on the dashboard and in **Git & Task Output**. Git actions are serialized per project. Vibedev stores no credentials.
 
@@ -111,6 +119,10 @@ dotnet run --project tests/Vibedev.SmokeTests -c Release
 dotnet run --project tests/Vibedev.SmokeTests -c Release -- --project-drag
 dotnet run --project tests/Vibedev.SmokeTests -c Release -- --dashboard
 dotnet run --project tests/Vibedev.SmokeTests -c Release -- --context-menu
+dotnet run --project tests/Vibedev.SmokeTests -c Release -- --tasks
+dotnet run --project tests/Vibedev.SmokeTests -c Release -- --git-sync
+dotnet run --project tests/Vibedev.SmokeTests -c Release -- --git-history
+dotnet run --project tests/Vibedev.SmokeTests -c Release -- --claude-sessions
 ```
 
 Core tests use disposable local Git remotes and check selective staging/unstaging/committing, renames, Unicode paths, build-location parsing, LSP message framing, commit-all, push/pull, cancellation, text encoding, external-change protection, recursive discovery, project search and launch resolution. Windows smoke tests exercise actual WPF panels, file watching, Git diffs and selection, tab swaps, terminal visibility, C# completion/diagnostics/hover/definitions, clickable xterm errors, layout restoration, WebView2 and ConPTY input/stop. Install C# support with the **C# server** button (or `dotnet tool install --global csharp-ls --version 0.26.0`) before running smoke tests. Screenshots/results are written under `artifacts/`, leaving workspace projects untouched.
