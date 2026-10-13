@@ -34,6 +34,7 @@ Run `artifacts/Vibedev/Vibedev.exe`. Keep the whole published folder together. G
 - The dashboard has its own row above the project workspace. Opening, splitting, docking and floating projects never replace it or use its space. The activity-rail button shows or hides this row and lights up while it is visible. Dashboard visibility is remembered; older layouts automatically move the dashboard out of project panes.
 - Hide or show the Projects sidebar with the activity-rail button or `Ctrl+B`; its close button also hides it. Visibility and width are remembered.
 - **Split → / Split ↓** opens a project beside the current panel; repeat inside either pane to nest layouts. A project can appear in multiple panels.
+- Click a project panel to activate it; a thin blue border and glow mark the active panel. Press `F` outside editors and text inputs to maximize it within the project workspace, then press `F` again to restore the split layout. Floating project windows maximize and restore with the same shortcut. Switching projects or changing the panel layout exits focus mode.
 - Each project panel has a distinct frame and a top header with its name, folder path and close button, above the run controls. Project tab strips stay hidden. Switch projects through the sidebar or dashboard. **Float** detaches a panel. Dock floating panels before splitting them.
 - Right-click a dashboard project card or project panel for **Close project**, **Float project / Dock project**, Git review/commit/pull/push, status refresh, move left/right, **Replace project**, or **Swap with project**. Dashboard actions target that project's active panel, or its first panel if another project is active. Closing checks unsaved edits and leaves the project registered. Replacement keeps the panel's position, including floating windows; swaps preserve editors across groups, splits and floating windows. Right-click the dashboard background to add projects, refresh statuses, pull all projects or hide the dashboard.
 - Hide or show the terminal and task output with the activity-rail terminal button, the panel's close button or `Ctrl+backtick`. Its height and visibility are remembered; running a project reveals it again.
@@ -118,6 +119,7 @@ dotnet test tests/Vibedev.Tests -c Release
 dotnet run --project tests/Vibedev.SmokeTests -c Release
 dotnet run --project tests/Vibedev.SmokeTests -c Release -- --project-drag
 dotnet run --project tests/Vibedev.SmokeTests -c Release -- --dashboard
+dotnet run --project tests/Vibedev.SmokeTests -c Release -- --focus-mode
 dotnet run --project tests/Vibedev.SmokeTests -c Release -- --context-menu
 dotnet run --project tests/Vibedev.SmokeTests -c Release -- --tasks
 dotnet run --project tests/Vibedev.SmokeTests -c Release -- --git-sync

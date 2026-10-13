@@ -36,6 +36,7 @@ internal static partial class Program
             {
                 if (args.Contains("--project-drag")) await ExecuteProjectDragAsync(window, root);
                 else if (args.Contains("--dashboard")) await ExecuteDashboardAsync(window, root);
+                else if (args.Contains("--focus-mode")) await ExecuteFocusModeAsync(window, root);
                 else if (args.Contains("--context-menu")) await ExecuteProjectContextMenusAsync(window, root);
                 else if (args.Contains("--tasks")) await ExecuteProjectTasksAsync(window, root);
                 else if (args.Contains("--git-sync")) await ExecuteGitSyncAsync(window, root);

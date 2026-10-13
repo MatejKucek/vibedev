@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media.Effects;
 using Vibedev.Core;
 using Vibedev.Services;
 
@@ -32,6 +33,7 @@ public sealed class ProjectView : UserControl, IDisposable
     internal TextBlock ProjectTitle { get; }
     internal TextBlock TaskCount { get; } = Ui.Text("0 tasks", 11, "#C4B5DB");
     internal Button CloseProjectButton { get; }
+    internal Border ProjectFrame { get; }
     public LaunchConfiguration? SelectedLaunch => launches.SelectedItem as LaunchConfiguration;
     internal ProjectFileTree FileTree => tree;
     internal ProjectSearchView Search => search;
@@ -40,7 +42,7 @@ public sealed class ProjectView : UserControl, IDisposable
 
     public ProjectView(MainWindow main, ProjectState project)
     {
-        this.main = main; Project = project;
+        this.main = main; Project = project; Focusable = true;
         language = new(this, text => main.Log($"[{Project.Entry.Name}] {text}"));
         tree = new(project.Entry.Path);
         tree.FileActivated += async path => await OpenFileAsync(path);
@@ -54,7 +56,7 @@ public sealed class ProjectView : UserControl, IDisposable
         identity.ColumnDefinitions.Add(new() { Width = GridLength.Auto, MaxWidth = 160 }); identity.ColumnDefinitions.Add(new() { Width = GridLength.Auto }); identity.ColumnDefinitions.Add(new());
         ProjectTitle = Ui.Text(project.Entry.Name, 16);
         ProjectTitle.FontWeight = FontWeights.SemiBold; ProjectTitle.TextWrapping = TextWrapping.NoWrap; ProjectTitle.TextTrimming = TextTrimming.CharacterEllipsis;
-        ProjectTitle.Margin = new(0, 0, 10, 0); ProjectTitle.VerticalAlignment = VerticalAlignment.Center; ProjectTitle.ToolTip = project.Entry.Path + "\nDrag the name to move or dock this panel\nRight-click for Git, float/dock, close and panel layout actions";
+        ProjectTitle.Margin = new(0, 0, 10, 0); ProjectTitle.VerticalAlignment = VerticalAlignment.Center; ProjectTitle.ToolTip = project.Entry.Path + "\nDrag the name to move or dock this panel\nF: toggle focus mode (outside text inputs)\nRight-click for Git, float/dock, close and panel layout actions";
         ProjectDragHandle.Attach(ProjectTitle, point => DragRequested?.Invoke(point));
         identity.Children.Add(ProjectTitle);
         TaskCount.Margin = new(0, 0, 10, 0); TaskCount.VerticalAlignment = VerticalAlignment.Center; TaskCount.TextWrapping = TextWrapping.NoWrap; TaskCount.ToolTip = Path.Combine(project.Entry.Path, "tasks", "open"); Grid.SetColumn(TaskCount, 1); identity.Children.Add(TaskCount);
@@ -89,16 +91,25 @@ public sealed class ProjectView : UserControl, IDisposable
         var splitter = new GridSplitter { Width = 4, HorizontalAlignment = HorizontalAlignment.Stretch }; Grid.SetColumn(splitter, 1); work.Children.Add(splitter);
         var editing = new Grid(); editing.Children.Add(tabs); placeholder.TextAlignment = TextAlignment.Center; placeholder.HorizontalAlignment = HorizontalAlignment.Center; placeholder.VerticalAlignment = VerticalAlignment.Center; editing.Children.Add(placeholder); Grid.SetColumn(editing, 2); work.Children.Add(editing);
         Grid.SetRow(work, 1); root.Children.Add(work);
-        Content = new Border { BorderBrush = Ui.Brush("#6E568F"), BorderThickness = new(1), CornerRadius = new(6), Margin = new(4), Background = Ui.Brush("#18181B"), Child = root };
+        ProjectFrame = new Border { BorderBrush = Ui.Brush("#6E568F"), BorderThickness = new(1), CornerRadius = new(6), Margin = new(4), Background = Ui.Brush("#18181B"), Child = root };
+        Content = ProjectFrame;
         launches.SelectionChanged += (_, _) => RefreshState();
         PreviewKeyDown += (_, e) =>
         {
+            main.HandleFocusKey(e);
             if (e.Key == Key.F && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift)) { e.Handled = true; ShowSearch(); }
             if (e.Key == Key.P && Keyboard.Modifiers == ModifierKeys.Control) { e.Handled = true; ShowSearch(true); }
         };
         LoadLaunches(); RefreshTree(); RefreshState();
         try { monitor = new(Project.Entry.Path, Dispatcher, RefreshFilesAsync, text => main.Log($"[{Project.Entry.Name}] {text}")); }
         catch (Exception ex) { main.Log($"[{Project.Entry.Name}] Live file updates unavailable: {ex.Message}"); }
+    }
+    internal void SetActive(bool active)
+    {
+        if (ProjectFrame.Tag is bool previous && previous == active) return;
+        ProjectFrame.Tag = active;
+        ProjectFrame.BorderBrush = Ui.Brush(active ? "#3B9EFF" : "#6E568F");
+        ProjectFrame.Effect = active ? new DropShadowEffect { Color = System.Windows.Media.Color.FromRgb(0x3B, 0x9E, 0xFF), BlurRadius = 6, ShadowDepth = 0, Opacity = 0.6 } : null;
     }
     public void LoadLaunches()
     {

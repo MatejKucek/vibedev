@@ -3,6 +3,7 @@ using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
 using System.Windows.Input;
 using System.Windows.Threading;
@@ -35,6 +36,11 @@ public partial class MainWindow : Window
     private readonly ClaudeSessionReader claudeSessions;
     private bool readingClaude;
     private bool closing, checkingClose, listing, refreshing, pulling, loaded;
+    private ProjectFocusMode? focusMode;
+    private LayoutDocument? focusedDocument;
+    private (ILayoutElement Element, ILayoutContainer Parent)[] focusLayout = [];
+    private Window? focusedFloatingWindow;
+    private WindowState previousFloatingState;
     private CancellationTokenSource operations = new();
     public List<ProjectState> Projects { get; } = [];
     public IReadOnlyList<ProjectState> OpenProjects => Documents().Select(d => d.Content).OfType<ProjectView>().Select(v => v.Project).Distinct().ToArray();
@@ -42,6 +48,7 @@ public partial class MainWindow : Window
     public bool ProjectSidebarVisible => ProjectsSidebar.Visibility == Visibility.Visible;
     public bool TerminalVisible => TerminalPanel.Visibility == Visibility.Visible;
     public bool DashboardVisible => DashboardHost.Visibility == Visibility.Visible;
+    public bool FocusModeActive => focusedDocument is not null;
     internal bool IsPulling => pulling;
     internal GitService Git => git;
     internal DashboardView Dashboard => dashboard;
@@ -84,10 +91,11 @@ public partial class MainWindow : Window
             PopulateProjectMenu(tabMenu, document);
         };
         Dock.DocumentContextMenu = tabMenu;
-        Dock.LayoutChanged += (_, _) => ConfigureProjectPanes();
+        Dock.LayoutChanged += (_, _) => { ExitFocusMode(); ConfigureProjectPanes(); };
         InitializeLayout();
         Dock.DocumentClosing += async (_, e) =>
         {
+            if (focusedDocument == e.Document) ExitFocusMode();
             if (allowedClose.Remove(e.Document) || e.Document.Content is not ProjectView view) return;
             e.Cancel = true;
             if (await view.CanCloseAsync()) { allowedClose.Add(e.Document); e.Document.Close(); }
@@ -99,6 +107,8 @@ public partial class MainWindow : Window
         };
         Dock.ActiveContentChanged += (_, _) =>
         {
+            if (focusedDocument is not null && !ReferenceEquals(Dock.ActiveContent, focusedDocument.Content)) ExitFocusMode();
+            UpdateActiveProjectBorders();
             if (Dock.ActiveContent is ProjectView view) terminal.SetDirectory(view.Project.Entry.Path);
             UpdateDashboardButton();
         };
@@ -116,6 +126,7 @@ public partial class MainWindow : Window
         Closing += Window_Closing;
         PreviewKeyDown += (_, e) =>
         {
+            HandleFocusKey(e);
             if (e.Key == Key.B && Keyboard.Modifiers == ModifierKeys.Control) { e.Handled = true; ToggleProjectSidebar(); }
             if (e.Key == Key.Oem3 && Keyboard.Modifiers == ModifierKeys.Control) { e.Handled = true; ToggleTerminal(); }
         };
@@ -172,7 +183,9 @@ public partial class MainWindow : Window
     }
     private void ProjectLayoutUpdated(object? sender, EventArgs e)
     {
+        if (FocusModeActive && !focusLayout.SequenceEqual(Dock.Layout.Descendents().Select(element => (element, element.Parent)))) ExitFocusMode();
         foreach (var pane in Dock.Layout.Descendents().OfType<LayoutDocumentPane>()) pane.ShowHeader = false;
+        UpdateActiveProjectBorders();
         UpdateDashboardButton();
         if (!closing && !dashboard.DisplayedProjects.SequenceEqual(OpenProjects)) dashboard.Refresh();
     }
@@ -224,14 +237,82 @@ public partial class MainWindow : Window
     private void WireView(LayoutDocument doc)
     {
         if (doc.Content is not ProjectView view) return;
+        doc.IsActiveChanged -= ProjectActiveChanged;
+        doc.IsActiveChanged += ProjectActiveChanged;
+        view.SetActive(doc.IsActive);
+        view.PreviewMouseDown += (_, e) =>
+        {
+            doc.IsSelected = true; doc.IsActive = true;
+            if (!IsTextInput(e.OriginalSource as DependencyObject)) view.Focus();
+        };
+        view.GotKeyboardFocus += (_, _) => { doc.IsSelected = true; doc.IsActive = true; };
         view.SplitRequested = orientation => Split(doc, orientation);
-        view.FloatRequested = () => doc.Float();
+        view.FloatRequested = () => { ExitFocusMode(); doc.Float(); };
         view.CloseRequested = () => doc.Close();
         view.DragRequested = point => DragProjectDocument(doc, point);
         var menu = CreateProjectContextMenu(() => doc);
         view.ContextMenu = menu;
         view.ProjectTitle.ContextMenu = menu;
         doc.ToolTip = view.Project.Entry.Path + "\nRight-click to reorder, replace or swap project panels";
+    }
+    private void ProjectActiveChanged(object? sender, EventArgs e) => UpdateActiveProjectBorders();
+    private void UpdateActiveProjectBorders()
+    {
+        foreach (var document in Documents())
+            if (document.Content is ProjectView view) view.SetActive(document.IsActive);
+    }
+    internal void HandleFocusKey(KeyEventArgs e)
+    {
+        if (e.Handled || e.Key != Key.F || Keyboard.Modifiers != ModifierKeys.None || IsTextInput(e.OriginalSource as DependencyObject)) return;
+        if (e.IsRepeat) { e.Handled = true; return; }
+        if (FocusModeActive || Documents().Any(d => d.IsActive && d.Content is ProjectView))
+        {
+            e.Handled = true;
+            ToggleFocusMode();
+        }
+    }
+    private static bool IsTextInput(DependencyObject? element)
+    {
+        while (element is not null)
+        {
+            if (element is TextBoxBase or PasswordBox or ICSharpCode.AvalonEdit.TextEditor or TerminalControl || element is ComboBox { IsEditable: true }) return true;
+            element = element is System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D
+                ? System.Windows.Media.VisualTreeHelper.GetParent(element)
+                : LogicalTreeHelper.GetParent(element);
+        }
+        return false;
+    }
+    public void ToggleFocusMode()
+    {
+        if (FocusModeActive) { ExitFocusMode(); return; }
+        var document = Documents().FirstOrDefault(d => d.IsActive && d.Content is ProjectView);
+        if (document?.Content is not ProjectView view) return;
+        view.UpdateLayout();
+        focusedDocument = document;
+        focusLayout = Dock.Layout.Descendents().Select(element => (element, element.Parent)).ToArray();
+        focusMode = new(view);
+        if (document.IsFloating && Application.Current.Windows.OfType<LayoutFloatingWindowControl>()
+            .FirstOrDefault(window => window.Model.Descendents().Contains(document)) is { } floating)
+        {
+            focusedFloatingWindow = floating; previousFloatingState = floating.WindowState;
+            SetFloatingFocusState(floating, WindowState.Maximized);
+        }
+    }
+    private void ExitFocusMode()
+    {
+        focusedDocument = null;
+        focusMode?.Dispose(); focusMode = null; focusLayout = [];
+        if (focusedFloatingWindow is { } floating)
+        {
+            focusedFloatingWindow = null;
+            SetFloatingFocusState(floating, previousFloatingState);
+        }
+    }
+    private static void SetFloatingFocusState(Window window, WindowState state)
+    {
+        // AvalonDock tracks native maximize/restore commands and rejects direct WindowState restores.
+        SendMessage(new WindowInteropHelper(window).Handle, 0x0112 /* WM_SYSCOMMAND */,
+            new IntPtr(state == WindowState.Maximized ? 0xF030 /* SC_MAXIMIZE */ : 0xF120 /* SC_RESTORE */), IntPtr.Zero);
     }
     internal ContextMenu CreateProjectContextMenu(ProjectState project) => CreateProjectContextMenu(() =>
         Documents().FirstOrDefault(d => d.Content is ProjectView v && v.Project == project && d.IsActive) ??
@@ -288,6 +369,7 @@ public partial class MainWindow : Window
             var floating = new MenuItem { Header = isFloating ? "Dock project" : "Float project", IsEnabled = isFloating ? document.CanMove : document.CanFloat && Dock.AllowFloatingWindows };
             floating.Click += (_, _) =>
             {
+                ExitFocusMode();
                 if (document.IsFloating) document.Dock(); else document.Float();
                 document.IsActive = true; document.IsSelected = true; dashboard.Refresh(); SaveWorkspace();
             };
@@ -303,6 +385,7 @@ public partial class MainWindow : Window
         try
         {
             if (!await previous.CanCloseAsync() || closing || !ReferenceEquals(document.Content, previous) || !Documents().Contains(document)) return false;
+            ExitFocusMode();
             var replacement = CreateView(project, document.ContentId);
             document.Content = replacement; document.Title = project.Entry.Name; WireView(document);
             previous.Dispose();
@@ -314,6 +397,7 @@ public partial class MainWindow : Window
     internal void SwapProjectDocuments(LayoutDocument first, LayoutDocument second)
     {
         if (first == second || first.Content is not ProjectView || second.Content is not ProjectView || first.Parent is not LayoutDocumentPane firstPane || second.Parent is not LayoutDocumentPane secondPane) return;
+        ExitFocusMode();
         if (ReferenceEquals(firstPane, secondPane))
         {
             var a = firstPane.Children.IndexOf(first); var b = firstPane.Children.IndexOf(second);
@@ -335,6 +419,7 @@ public partial class MainWindow : Window
     }
     internal LayoutDocument OpenProjectWindow(ProjectState project)
     {
+        ExitFocusMode();
         var document = NewProjectDocument(project);
         document.FloatingWidth = Math.Clamp(Dock.ActualWidth, 640, 1000);
         document.FloatingHeight = Math.Clamp(Dock.ActualHeight, 400, 700);
@@ -347,6 +432,7 @@ public partial class MainWindow : Window
     private void DragProjectDocument(LayoutDocument document, Point screenPosition)
     {
         if (closing || !document.CanFloat || !document.CanMove || !Dock.AllowFloatingWindows || !Documents().Contains(document)) return;
+        ExitFocusMode();
         document.IsSelected = true; document.IsActive = true;
         var floating = document.FindParent<LayoutFloatingWindow>();
         if (floating is null || floating.Descendents().OfType<LayoutDocument>().Count() > 1) document.Float();
@@ -378,6 +464,7 @@ public partial class MainWindow : Window
     internal void SplitWithProject(LayoutDocument source, Orientation orientation, ProjectState project)
     {
         if (source.Parent is not LayoutDocumentPane pane || pane.Parent is not ILayoutContainer parent) return;
+        ExitFocusMode();
         var group = new LayoutDocumentPaneGroup { Orientation = orientation, DockWidth = pane.DockWidth, DockHeight = pane.DockHeight };
         parent.ReplaceChild(pane, group); group.Children.Add(pane);
         var newPane = new LayoutDocumentPane(); var doc = NewProjectDocument(project); newPane.Children.Add(doc); group.Children.Add(newPane); doc.IsActive = true;
@@ -631,6 +718,7 @@ public partial class MainWindow : Window
             foreach (var view in views.Values.ToArray()) if (!await view.CanCloseAsync()) return;
             if ((RunningProject is not null || Projects.Any(p => p.Busy)) && MessageBox.Show(this, "Stop the active run and Git operations, then close?", "Work is running", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes) return;
             SaveWorkspace();
+            ExitFocusMode();
             try
             {
                 Directory.CreateDirectory(store.DirectoryPath);
