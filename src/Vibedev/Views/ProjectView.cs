@@ -125,7 +125,13 @@ public sealed class ProjectView : UserControl, IDisposable
     }
     public void LoadLaunches()
     {
-        try { var name = SelectedLaunch?.Name; launches.ItemsSource = LaunchService.Read(Project.Entry.Path); launches.SelectedItem = launches.Items.OfType<LaunchConfiguration>().FirstOrDefault(c => c.Name == name) ?? launches.Items.OfType<LaunchConfiguration>().FirstOrDefault(); }
+        try
+        {
+            var name = SelectedLaunch?.Name; var index = launches.SelectedIndex;
+            launches.ItemsSource = LaunchService.Read(Project.Entry.Path);
+            var items = launches.Items.OfType<LaunchConfiguration>().ToArray();
+            launches.SelectedItem = (index >= 0 && index < items.Length && items[index].Name == name ? items[index] : null) ?? items.FirstOrDefault(c => c.Name == name) ?? items.FirstOrDefault();
+        }
         catch (Exception ex) { launches.ItemsSource = null; main.Log($"[{Project.Entry.Name}] launch.json: {ex.Message}"); }
         launches.IsEnabled = launches.Items.Count > 0;
         launches.ToolTip = launches.Items.Count == 0 ? "No configurations. Add .vscode/launch.json, then refresh." : ".vscode/launch.json"; RefreshState();
@@ -164,6 +170,16 @@ public sealed class ProjectView : UserControl, IDisposable
     {
         try
         {
+            if (ImageTab.IsImage(path))
+            {
+                var image = tabs.Items.OfType<ImageTab>().FirstOrDefault(t => t.FilePath.Equals(path, StringComparison.OrdinalIgnoreCase));
+                if (image is null)
+                {
+                    image = new ImageTab(path, t => { tabs.Items.Remove(t); placeholder.Visibility = tabs.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed; });
+                    tabs.Items.Add(image); placeholder.Visibility = Visibility.Collapsed;
+                }
+                tabs.SelectedItem = image; tree.Reveal(path); return;
+            }
             var existing = Editors.FirstOrDefault(e => e.FilePath.Equals(path, StringComparison.OrdinalIgnoreCase));
             if (existing is not null) { tabs.SelectedItem = existing; tree.Reveal(path); return; }
             var file = await TextFile.OpenAsync(path);
@@ -183,7 +199,8 @@ public sealed class ProjectView : UserControl, IDisposable
     private async Task RefreshFilesAsync(IReadOnlyDictionary<string, int> changes)
     {
         if (disposed) return;
-        RefreshTree(); LoadLaunches();
+        RefreshTree();
+        if (changes.Keys.Any(path => Path.GetFileName(path).Equals("launch.json", StringComparison.OrdinalIgnoreCase))) LoadLaunches();
         IOException? retry = null;
         foreach (var editor in Editors.ToArray())
         {

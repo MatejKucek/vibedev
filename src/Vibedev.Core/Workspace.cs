@@ -18,7 +18,7 @@ public sealed class WorkspaceState
     public double Height { get; set; } = 920;
     public bool DashboardVisible { get; set; } = true;
     public bool ProjectSidebarVisible { get; set; } = true;
-    public double ProjectSidebarWidth { get; set; } = 224;
+    public double ProjectSidebarWidth { get; set; } = 300;
     public bool TerminalVisible { get; set; } = true;
     public double TerminalHeight { get; set; } = 240;
 }

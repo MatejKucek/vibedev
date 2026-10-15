@@ -4,8 +4,9 @@
         xmlns:ad="clr-namespace:AvalonDock;assembly=AvalonDock"
         Title="Vibedev" Icon="Assets/app-icon.ico" Width="1440" Height="920" MinWidth="1000" MinHeight="640" WindowStartupLocation="CenterScreen" WindowState="Maximized">
     <Grid>
-        <Grid.RowDefinitions><RowDefinition Height="*"/><RowDefinition Height="28"/></Grid.RowDefinitions>
-        <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition x:Name="ProjectsColumn" Width="224" MinWidth="160"/><ColumnDefinition x:Name="ProjectsSplitterColumn" Width="4"/><ColumnDefinition Width="*" MinWidth="400"/></Grid.ColumnDefinitions>
+        <Grid.RowDefinitions><RowDefinition Height="32"/><RowDefinition Height="*"/><RowDefinition Height="28"/></Grid.RowDefinitions>
+        <Border Background="#202024" BorderBrush="#34343A" BorderThickness="0,0,0,1"><DockPanel Margin="12,0,6,0"><Button x:Name="UpdateButton" Content="⟳ Update" DockPanel.Dock="Right" Padding="10,3" VerticalAlignment="Center" ToolTip="Close Vibedev, pull latest changes, rebuild and restart" Click="Update_Click"/><TextBlock Text="VIBEDEV" FontSize="11" FontWeight="SemiBold" Foreground="#9898A6" VerticalAlignment="Center"/></DockPanel></Border>
+        <Grid Grid.Row="1"><Grid.ColumnDefinitions><ColumnDefinition Width="48"/><ColumnDefinition x:Name="ProjectsColumn" Width="300" MinWidth="260"/><ColumnDefinition x:Name="ProjectsSplitterColumn" Width="4"/><ColumnDefinition Width="*" MinWidth="400"/></Grid.ColumnDefinitions>
             <Border Background="#202024" BorderBrush="#34343A" BorderThickness="0,0,1,0"><StackPanel Margin="4,12">
                 <Button x:Name="DashboardToggleButton" Content="◈" FontSize="22" Padding="6,10" Margin="0,0,0,10" Background="Transparent" BorderThickness="0" ToolTip="Show / hide dashboard" Click="Dashboard_Click"/>
                 <Button x:Name="ProjectsToggleButton" Content="▤" FontSize="21" Padding="6,10" Margin="0,0,0,10" Background="Transparent" BorderThickness="0" ToolTip="Show / hide Projects (Ctrl+B)" Click="ToggleProjects_Click"/>
@@ -14,9 +15,9 @@
                 <Button x:Name="TerminalToggleButton" Content="›_" FontFamily="Consolas" FontSize="16" Padding="4,10" Margin="0" Background="Transparent" BorderThickness="0" ToolTip="Show / hide terminal and task output (Ctrl+`)" Click="Terminal_Click"/>
             </StackPanel></Border>
             <Grid x:Name="ProjectsSidebar" Grid.Column="1" Background="#202024"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
-                <DockPanel Margin="16,14,8,12"><Button Content="×" Padding="6,2" Margin="6,0,0,0" Background="Transparent" BorderThickness="0" DockPanel.Dock="Right" ToolTip="Hide Projects (Ctrl+B)" Click="ToggleProjects_Click"/><TextBlock x:Name="ProjectCount" Text="0" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="#A78BFA"/><TextBlock Text="PROJECTS" FontSize="11" FontWeight="SemiBold" Foreground="#9898A6" VerticalAlignment="Center"/></DockPanel>
+                <DockPanel Margin="16,14,8,12"><Button Content="×" Padding="6,2" Margin="6,0,0,0" Background="Transparent" BorderThickness="0" DockPanel.Dock="Right" ToolTip="Hide Projects (Ctrl+B)" Click="ToggleProjects_Click"/><Button x:Name="PullAllButton" Content="↻" FontSize="18" Width="30" Height="28" Padding="0,0,0,2" Margin="6,0,0,0" Background="Transparent" BorderThickness="0" DockPanel.Dock="Right" ToolTip="Pull all listed projects" AutomationProperties.Name="Pull all listed projects" Click="PullAll_Click"/><TextBlock x:Name="ProjectCount" Text="0" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="#A78BFA"/><TextBlock Text="PROJECTS" FontSize="11" FontWeight="SemiBold" Foreground="#9898A6" VerticalAlignment="Center"/></DockPanel>
                 <TextBox Grid.Row="1" x:Name="ProjectFilter" Margin="10,0,10,10" Tag="Filter projects…" AutomationProperties.Name="Filter projects" ToolTip="Filter projects by name or path" TextChanged="ProjectFilter_Changed"/>
-                <ListBox Grid.Row="2" x:Name="ProjectList" Margin="6,0" SelectionChanged="ProjectList_Changed"/>
+                <ListBox Grid.Row="2" x:Name="ProjectList" Margin="6,0" ScrollViewer.HorizontalScrollBarVisibility="Disabled" SelectionChanged="ProjectList_Changed"/>
                 <StackPanel Grid.Row="3" Margin="12,14"><Button Content="⌕ Scan a directory" Click="Scan_Click" ToolTip="Find repositories recursively" Margin="0,0,0,8"/><TextBlock x:Name="ScanRootLabel" Text="Find repositories in subfolders" FontSize="11" Foreground="#9898A6" TextWrapping="Wrap"/></StackPanel>
             </Grid><GridSplitter x:Name="ProjectsSplitter" Grid.Column="2" Width="4" HorizontalAlignment="Stretch" ToolTip="Resize Projects sidebar"/>
             <Grid Grid.Column="3"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="*" MinHeight="180"/><RowDefinition x:Name="TerminalSplitterRow" Height="4"/><RowDefinition x:Name="TerminalRow" Height="240" MinHeight="100"/></Grid.RowDefinitions>
@@ -28,6 +29,6 @@
                 </Grid>
             </Grid>
         </Grid>
-        <Border Grid.Row="1" Background="#2F2545"><DockPanel Margin="12,0"><TextBlock x:Name="StatusLabel" Text="Ready" FontSize="12" Foreground="#EDE9F6" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/><TextBlock DockPanel.Dock="Right" Text=".NET 10 · LOCAL WORKSPACE" FontSize="11" Foreground="#C4B5DB" HorizontalAlignment="Right" VerticalAlignment="Center"/></DockPanel></Border>
+        <Border Grid.Row="2" Background="#2F2545"><DockPanel Margin="12,0"><TextBlock x:Name="StatusLabel" Text="Ready" FontSize="12" Foreground="#EDE9F6" VerticalAlignment="Center" TextTrimming="CharacterEllipsis"/><TextBlock DockPanel.Dock="Right" Text=".NET 10 · LOCAL WORKSPACE" FontSize="11" Foreground="#C4B5DB" HorizontalAlignment="Right" VerticalAlignment="Center"/></DockPanel></Border>
     </Grid>
 </Window>

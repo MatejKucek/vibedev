@@ -42,6 +42,7 @@ internal static partial class Program
                 else if (args.Contains("--context-menu")) await ExecuteProjectContextMenusAsync(window, root);
                 else if (args.Contains("--tasks")) await ExecuteProjectTasksAsync(window, root);
                 else if (args.Contains("--git-sync")) await ExecuteGitSyncAsync(window, root);
+                else if (args.Contains("--sidebar-pull")) await ExecuteSidebarPullAsync(window, root);
                 else if (args.Contains("--git-history")) await ExecuteGitHistoryAsync(window, root);
                 else if (args.Contains("--claude-sessions")) await ExecuteClaudeSessionsAsync(window, root);
                 else await ExecuteAsync(window, root);

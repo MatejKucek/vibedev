@@ -1,4 +1,5 @@
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Windows;
@@ -6,6 +7,8 @@ using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
 using System.Windows.Input;
+using System.Windows.Media;
+using System.Windows.Media.Animation;
 using System.Windows.Threading;
 using AvalonDock;
 using AvalonDock.Controls;
@@ -29,6 +32,7 @@ public partial class MainWindow : Window
     private readonly Dictionary<string, ProjectView> views = [];
     private readonly HashSet<LayoutDocument> allowedClose = [];
     private readonly HashSet<LayoutDocument> replacing = [];
+    private readonly Dictionary<ProjectState, TextBlock> sidebarTaskCounts = [];
     private readonly List<(int Offset, string Directory)> outputContexts = [];
     private readonly DispatcherTimer refreshTimer;
     private readonly DispatcherTimer fileStatusTimer;
@@ -124,6 +128,7 @@ public partial class MainWindow : Window
             await RefreshClaudeSessionsAsync();
         };
         Closing += Window_Closing;
+        Closed += (_, _) => LaunchPendingUpdate();
         PreviewKeyDown += (_, e) =>
         {
             HandleFocusKey(e);
@@ -173,7 +178,9 @@ public partial class MainWindow : Window
     {
         if (project.OpenTaskCount == count) return;
         project.OpenTaskCount = count;
-        if (!closing) dashboard.Refresh();
+        if (closing) return;
+        if (sidebarTaskCounts.TryGetValue(project, out var label)) SetTaskCount(label, count);
+        dashboard.Refresh();
     }
     private void ConfigureProjectPanes()
     {
@@ -243,7 +250,7 @@ public partial class MainWindow : Window
         view.PreviewMouseDown += (_, e) =>
         {
             doc.IsSelected = true; doc.IsActive = true;
-            if (!IsTextInput(e.OriginalSource as DependencyObject)) view.Focus();
+            if (!IsTextInput(e.OriginalSource as DependencyObject) && !IsDropDown(e.OriginalSource as DependencyObject)) view.Focus();
         };
         view.GotKeyboardFocus += (_, _) => { doc.IsSelected = true; doc.IsActive = true; };
         view.SplitRequested = orientation => Split(doc, orientation);
@@ -272,7 +279,7 @@ public partial class MainWindow : Window
             ?? (sidebarActiveProject is not null && open.Contains(sidebarActiveProject) ? sidebarActiveProject : null);
         foreach (var item in ProjectList.Items.OfType<ListBoxItem>())
         {
-            if (item.Content is not Border { Child: StackPanel { Children: [TextBlock name, ..] } } frame) continue;
+            if (item.Content is not Border { Child: Grid { Children: [StackPanel { Children: [TextBlock name, ..] }, ..] } } frame) continue;
             var active = item.Tag == sidebarActiveProject;
             frame.Background = active ? Ui.Brush("#2C2838") : System.Windows.Media.Brushes.Transparent;
             frame.BorderBrush = active ? Ui.Brush("#A78BFA") : System.Windows.Media.Brushes.Transparent;
@@ -295,6 +302,18 @@ public partial class MainWindow : Window
         while (element is not null)
         {
             if (element is TextBoxBase or PasswordBox or ICSharpCode.AvalonEdit.TextEditor or TerminalControl || element is ComboBox { IsEditable: true }) return true;
+            element = element is System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D
+                ? System.Windows.Media.VisualTreeHelper.GetParent(element)
+                : LogicalTreeHelper.GetParent(element);
+        }
+        return false;
+    }
+    // Stealing focus from a ComboBox closes its dropdown before the click selects anything.
+    private static bool IsDropDown(DependencyObject? element)
+    {
+        while (element is not null)
+        {
+            if (element is ComboBox or ComboBoxItem) return true;
             element = element is System.Windows.Media.Visual or System.Windows.Media.Media3D.Visual3D
                 ? System.Windows.Media.VisualTreeHelper.GetParent(element)
                 : LogicalTreeHelper.GetParent(element);
@@ -557,7 +576,7 @@ public partial class MainWindow : Window
         catch (Exception ex) { project.Failed = true; project.Activity = ex.Message; Log($"[{project.Entry.Name}] {ex.Message}"); return false; }
         finally { project.Busy = false; Redraw(); foreach (var view in views.Values.Where(v => v.Project == project).ToArray()) _ = view.GitView.RefreshAsync(); }
     }
-    private async Task RefreshStatusesAsync()
+    internal async Task RefreshStatusesAsync()
     {
         if (refreshing || closing) return; refreshing = true;
         try
@@ -568,6 +587,8 @@ public partial class MainWindow : Window
                 try { project.Git = await git.StatusAsync(project.Entry.Path, operations.Token); }
                 catch (OperationCanceledException) { return; }
                 catch (Exception ex) { project.Git = new(false, "Unavailable", 0, ex.Message); }
+                try { project.OpenTaskCount = await Task.Run(() => ProjectTasksView.CountOpenTasks(project.Entry.Path)); }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { }
             }
             if (!closing) Redraw();
         }
@@ -622,21 +643,34 @@ public partial class MainWindow : Window
         catch (Exception ex) { project.Failed = true; project.Activity = action + " failed"; Log($"[{project.Entry.Name}] {ex.Message}"); return false; }
         finally { project.Busy = false; SetStatus(project.Entry.Name + " · " + project.Activity); if (!closing) { Redraw(); foreach (var view in views.Values.Where(v => v.Project == project).ToArray()) _ = view.GitView.RefreshAsync(); } }
     }
-    public async void PullAll(bool openOnly = false)
+    public async void PullAll(bool openOnly = false) => await PullAllAsync(openOnly ? OpenProjects : Projects, openOnly ? "open projects" : "all");
+    /// <summary>Pulls the projects a few at a time; each sidebar row shows queued, pulling, then a check or a cross.</summary>
+    internal async Task PullAllAsync(IEnumerable<ProjectState> projects, string label)
     {
-        if (pulling) return; pulling = true; dashboard.Refresh();
-        var success = 0; var failed = 0;
-        var targets = openOnly ? OpenProjects.ToArray() : Projects.ToArray();
+        if (pulling || closing) return;
+        var targets = projects.Where(p => p.Git?.IsRepository != false).ToArray();
+        if (targets.Length == 0) { SetStatus("No Git repositories to pull."); return; }
+        pulling = true;
+        foreach (var project in Projects) project.Pull = targets.Contains(project) ? PullState.Queued : PullState.None;
+        Redraw();
+        using var gate = new SemaphoreSlim(4);
         try
         {
-            foreach (var project in targets)
+            await Task.WhenAll(targets.Select(async project =>
             {
-                if (closing) break;
-                if (await GitActionAsync(project, "pull")) success++; else failed++;
-            }
-            SetStatus($"Pull {(openOnly ? "open projects" : "all")} finished · {success} succeeded · {failed} failed or busy");
+                await gate.WaitAsync();
+                try
+                {
+                    if (closing) { project.Pull = PullState.None; return; }
+                    project.Pull = PullState.Pulling; Redraw();
+                    project.Pull = await GitActionAsync(project, "pull") ? PullState.Succeeded : PullState.Failed;
+                    Redraw();
+                }
+                finally { gate.Release(); }
+            }));
+            SetStatus($"Pull {label} finished · {targets.Count(p => p.Pull == PullState.Succeeded)} succeeded · {targets.Count(p => p.Pull == PullState.Failed)} failed or busy");
         }
-        finally { pulling = false; dashboard.Refresh(); }
+        finally { pulling = false; Redraw(); }
     }
     public async void RunProject(ProjectView view)
     {
@@ -668,21 +702,103 @@ public partial class MainWindow : Window
         listing = true;
         var selected = (ProjectList.SelectedItem as ListBoxItem)?.Tag as ProjectState;
         ProjectList.Items.Clear();
-        foreach (var p in Projects.Where(p => p.Entry.Name.Contains(ProjectFilter.Text, StringComparison.OrdinalIgnoreCase) || p.Entry.Path.Contains(ProjectFilter.Text, StringComparison.OrdinalIgnoreCase)))
+        sidebarTaskCounts.Clear();
+        foreach (var p in ListedProjects)
         {
-            var row = new StackPanel(); row.Children.Add(Ui.Text("{ }  " + p.Entry.Name, 12));
-            var branch = Ui.Text(p.Failed ? p.Activity : p.Git?.Summary ?? "Local project", 11, p.Failed ? "#F87171" : "#A1A1AA"); branch.TextTrimming = TextTrimming.CharacterEllipsis; branch.TextWrapping = TextWrapping.NoWrap; branch.Margin = new(21, 3, 0, 0); row.Children.Add(branch);
+            var text = new StackPanel(); var title = Ui.Text("{ }  " + p.Entry.Name, 12); title.TextTrimming = TextTrimming.CharacterEllipsis; title.TextWrapping = TextWrapping.NoWrap; text.Children.Add(title);
+            var branch = Ui.Text(p.Failed ? p.Activity : p.Git?.Summary ?? "Local project", 11, p.Failed ? "#F87171" : "#A1A1AA"); branch.TextTrimming = TextTrimming.CharacterEllipsis; branch.TextWrapping = TextWrapping.NoWrap; branch.Margin = new(21, 3, 0, 0); text.Children.Add(branch);
+            var row = new Grid { ColumnDefinitions = { new() { Width = new GridLength(1, GridUnitType.Star) }, new() { Width = new GridLength(24) }, new() { Width = new GridLength(30) }, new() { Width = new GridLength(30) } } };
+            row.Children.Add(text);
+            var pull = PullIndicator(p); Grid.SetColumn(pull, 1); row.Children.Add(pull);
+            var tasks = Ui.Text("", 11); tasks.TextAlignment = TextAlignment.Right; tasks.VerticalAlignment = VerticalAlignment.Center; SetTaskCount(tasks, p.OpenTaskCount); Grid.SetColumn(tasks, 2); row.Children.Add(tasks); sidebarTaskCounts[p] = tasks;
+            var changed = p.Git?.IsRepository == true ? p.Git.Changes : 0;
+            var dirty = Ui.Text(changed > 0 ? changed.ToString() : "", 11, "#FB923C"); dirty.FontWeight = FontWeights.SemiBold; dirty.TextAlignment = TextAlignment.Right; dirty.VerticalAlignment = VerticalAlignment.Center; dirty.ToolTip = changed == 1 ? "1 uncommitted file" : $"{changed} uncommitted files"; Grid.SetColumn(dirty, 3); row.Children.Add(dirty);
             var frame = new Border { Child = row, Padding = new(8, 8, 10, 8), BorderThickness = new(2, 0, 0, 0), BorderBrush = System.Windows.Media.Brushes.Transparent, CornerRadius = new(3) };
             var item = new ListBoxItem { Content = frame, Tag = p, Padding = new(0), Margin = new(0, 0, 0, 2), ToolTip = p.Entry.Path + (p.Git?.IsRepository == true ? "\n" + p.Git.Branch : "") + "\nClick to open; drag out to create a new project window" }; ProjectList.Items.Add(item); if (p == selected) ProjectList.SelectedItem = item;
-            ProjectDragHandle.Attach(item, point =>
-            {
-                if (!closing && Projects.Contains(p) && Dock.AllowFloatingWindows) DragProjectDocument(OpenProjectWindow(p), point);
-            }, () => { if (ProjectList.SelectedItem == item) OpenProject(p); else ProjectList.SelectedItem = item; });
+            AttachSidebarDrag(item, p);
             item.ContextMenu = CreateSidebarProjectMenu(p);
         }
         listing = false; ProjectCount.Text = Projects.Count.ToString(); ScanRootLabel.Text = state.ScanRoot ?? "Find repositories in subfolders";
+        PullAllButton.IsEnabled = !pulling && ProjectList.Items.Count > 0;
         UpdateSidebarActiveProject();
         dashboard.Refresh(); foreach (var view in views.Values.ToArray()) view.RefreshState();
+    }
+    private void AttachSidebarDrag(ListBoxItem item, ProjectState project)
+    {
+        Point? origin = null; var reordering = false; ProjectState? target = null;
+        item.Cursor = Cursors.SizeAll;
+        ProjectState? TargetAt(Point inList)
+        {
+            var items = ProjectList.Items.OfType<ListBoxItem>().ToArray();
+            if (items.Length == 0) return null;
+            foreach (var li in items)
+            {
+                var top = li.TranslatePoint(new Point(0, 0), ProjectList).Y;
+                if (inList.Y >= top && inList.Y < top + li.ActualHeight) return li.Tag as ProjectState;
+            }
+            return (inList.Y < 0 ? items[0] : items[^1]).Tag as ProjectState;
+        }
+        void Highlight(ProjectState? next)
+        {
+            foreach (var li in ProjectList.Items.OfType<ListBoxItem>())
+                if (li.Content is Border b) b.Background = next is not null && next != project && ReferenceEquals(li.Tag, next) ? Ui.Brush("#2F2545") : null;
+            target = next;
+        }
+        void Reset() { origin = null; reordering = false; Highlight(null); if (item.IsMouseCaptured) item.ReleaseMouseCapture(); }
+        item.PreviewMouseLeftButtonDown += (_, e) => { if (!item.CaptureMouse()) return; origin = e.GetPosition(item); e.Handled = true; };
+        item.PreviewMouseMove += (_, e) =>
+        {
+            if (origin is not { } start) return;
+            if (e.LeftButton != MouseButtonState.Pressed) { Reset(); return; }
+            var position = e.GetPosition(item);
+            if (!reordering && !ProjectDragHandle.PassedThreshold(start, position)) return;
+            e.Handled = true;
+            var inList = e.GetPosition(ProjectList);
+            if (inList.X >= 0 && inList.X <= ProjectList.ActualWidth) { reordering = true; Highlight(TargetAt(inList)); return; }
+            // Dragged out sideways: tear off into a new project window.
+            var screen = item.PointToScreen(position); Reset();
+            if (!closing && Projects.Contains(project) && Dock.AllowFloatingWindows) DragProjectDocument(OpenProjectWindow(project), screen);
+        };
+        item.PreviewMouseLeftButtonUp += (_, e) =>
+        {
+            if (origin is null) return;
+            var inside = new Rect(item.RenderSize).Contains(e.GetPosition(item)); var wasReordering = reordering; var drop = target;
+            Reset(); e.Handled = true;
+            if (wasReordering)
+            {
+                if (drop is null || drop == project || !Projects.Contains(drop)) return;
+                var to = Projects.IndexOf(drop); Projects.Remove(project); Projects.Insert(to, project); SaveWorkspace(); Redraw();
+            }
+            else if (inside) { if (ProjectList.SelectedItem == item) OpenProject(project); else ProjectList.SelectedItem = item; }
+        };
+        item.LostMouseCapture += (_, _) => { origin = null; reordering = false; };
+    }
+    private IEnumerable<ProjectState> ListedProjects => Projects.Where(p => p.Entry.Name.Contains(ProjectFilter.Text, StringComparison.OrdinalIgnoreCase) || p.Entry.Path.Contains(ProjectFilter.Text, StringComparison.OrdinalIgnoreCase));
+    private static void SetTaskCount(TextBlock label, int count)
+    {
+        label.Text = count.ToString(); label.Foreground = Ui.Brush(count > 0 ? "#A78BFA" : "#5A5A66");
+        label.ToolTip = count == 1 ? "1 open task in tasks/open" : $"{count} open tasks in tasks/open";
+    }
+    private static FrameworkElement PullIndicator(ProjectState project)
+    {
+        if (project.Pull == PullState.Pulling)
+        {
+            // A three-quarter arc spinning around the centre of its fixed box.
+            var spinner = new System.Windows.Shapes.Path { Data = Geometry.Parse("M 7,2 A 5,5 0 1 1 2,7"), Width = 14, Height = 14, Stroke = Ui.Brush("#A78BFA"), StrokeThickness = 2, StrokeStartLineCap = PenLineCap.Round, StrokeEndLineCap = PenLineCap.Round,
+                HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center, RenderTransformOrigin = new(0.5, 0.5), ToolTip = "Pulling…" };
+            var rotation = new RotateTransform(); spinner.RenderTransform = rotation;
+            rotation.BeginAnimation(RotateTransform.AngleProperty, new DoubleAnimation(0, 360, TimeSpan.FromSeconds(0.9)) { RepeatBehavior = RepeatBehavior.Forever });
+            return spinner;
+        }
+        var (glyph, color, tip) = project.Pull switch
+        {
+            PullState.Queued => ("•", "#5A5A66", "Waiting to pull"),
+            PullState.Succeeded => ("✓", "#4ADE80", "Pull succeeded"),
+            PullState.Failed => ("✗", "#F87171", "Pull failed" + (project.Activity.Length > 0 ? " · " + project.Activity : "")),
+            _ => ("", "#5A5A66", null)
+        };
+        var label = Ui.Text(glyph, 13, color); label.FontWeight = FontWeights.Bold; label.TextAlignment = TextAlignment.Center; label.VerticalAlignment = VerticalAlignment.Center; label.ToolTip = tip;
+        return label;
     }
     internal ContextMenu CreateSidebarProjectMenu(ProjectState project)
     {
@@ -752,6 +868,35 @@ public partial class MainWindow : Window
         }
         catch (Exception ex) { Log("Workspace save failed: " + ex.Message); }
     }
+    private string? pendingUpdateScript;
+    private void Update_Click(object sender, RoutedEventArgs e)
+    {
+        string? script = null;
+        for (var dir = new DirectoryInfo(AppContext.BaseDirectory); dir is not null && script is null; dir = dir.Parent)
+        {
+            var candidate = Path.Combine(dir.FullName, "Pull Build and Run Vibedev.bat");
+            if (File.Exists(candidate)) script = candidate;
+        }
+        if (script is null) { Ui.Error("Cannot find 'Pull Build and Run Vibedev.bat' above " + AppContext.BaseDirectory, this); return; }
+        pendingUpdateScript = script;
+        Close();
+    }
+    private void LaunchPendingUpdate()
+    {
+        if (pendingUpdateScript is null) return;
+        // Wait for this process to exit so the publish step can overwrite the running binaries.
+        var script = pendingUpdateScript.Replace("'", "''");
+        try
+        {
+            Process.Start(new ProcessStartInfo("powershell.exe")
+            {
+                UseShellExecute = true,
+                WorkingDirectory = Path.GetDirectoryName(pendingUpdateScript)!,
+                Arguments = $"-NoProfile -ExecutionPolicy Bypass -Command \"Wait-Process -Id {Environment.ProcessId} -ErrorAction SilentlyContinue; & '{script}'\""
+            });
+        }
+        catch (Exception ex) { MessageBox.Show("Update failed to start: " + ex.Message, "Vibedev", MessageBoxButton.OK, MessageBoxImage.Error); }
+    }
     private async void Window_Closing(object? sender, CancelEventArgs e)
     {
         if (closing) return; e.Cancel = true; if (checkingClose) return; checkingClose = true;
@@ -776,8 +921,8 @@ public partial class MainWindow : Window
         if (!visible && ProjectSidebarVisible && ProjectsColumn.ActualWidth > 0) state.ProjectSidebarWidth = ProjectsColumn.ActualWidth;
         ProjectsSidebar.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
         ProjectsSplitter.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
-        ProjectsColumn.MinWidth = visible ? 160 : 0;
-        ProjectsColumn.Width = new GridLength(visible ? Math.Max(160, double.IsFinite(state.ProjectSidebarWidth) ? state.ProjectSidebarWidth : 224) : 0);
+        ProjectsColumn.MinWidth = visible ? 260 : 0;
+        ProjectsColumn.Width = new GridLength(visible ? Math.Max(260, double.IsFinite(state.ProjectSidebarWidth) ? state.ProjectSidebarWidth : 300) : 0);
         ProjectsSplitterColumn.Width = new GridLength(visible ? 4 : 0);
         ProjectsToggleButton.Background = visible ? Views.Ui.Brush("#343044") : System.Windows.Media.Brushes.Transparent;
         state.ProjectSidebarVisible = visible;
@@ -786,7 +931,7 @@ public partial class MainWindow : Window
     private void ToggleProjects_Click(object sender, RoutedEventArgs e) => ToggleProjectSidebar();
     private void AddProject_Click(object sender, RoutedEventArgs e) => AddProject();
     private void Scan_Click(object sender, RoutedEventArgs e) => Scan();
-    private void PullAll_Click(object sender, RoutedEventArgs e) => PullAll();
+    private async void PullAll_Click(object sender, RoutedEventArgs e) => await PullAllAsync(ListedProjects.ToArray(), ProjectFilter.Text.Length > 0 ? "listed projects" : "all");
     public void SetDashboardVisible(bool visible)
     {
         DashboardHost.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;

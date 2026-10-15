@@ -33,16 +33,23 @@ internal sealed class ProjectTasksView : UserControl
         };
     }
 
-    public int Refresh()
+    /// <summary>Counts open task files without a view, so closed projects can show their task count too.</summary>
+    public static int CountOpenTasks(string projectPath) => OpenTaskFiles(Path.Combine(projectPath, "tasks", "open")).Length;
+
+    private static string[] OpenTaskFiles(string directory)
     {
-        string[] paths;
         try
         {
-            paths = Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)
+            return Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)
                 .Where(path => Path.GetExtension(path).Equals(".md", StringComparison.OrdinalIgnoreCase))
                 .OrderBy(path => Path.GetRelativePath(directory, path), StringComparer.OrdinalIgnoreCase).ToArray();
         }
-        catch (DirectoryNotFoundException) { paths = []; }
+        catch (DirectoryNotFoundException) { return []; }
+    }
+
+    public int Refresh()
+    {
+        var paths = OpenTaskFiles(directory);
         var selected = (files.SelectedItem as ListBoxItem)?.Tag as string;
         files.Items.Clear();
         foreach (var path in paths)

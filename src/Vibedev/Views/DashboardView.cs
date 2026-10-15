@@ -14,8 +14,12 @@ public sealed class ProjectState(ProjectEntry entry)
     public bool Failed { get; set; }
     public bool Busy { get; set; }
     public int OpenTaskCount { get; set; }
+    public PullState Pull { get; set; }
     public ProjectClaudeActivity Claude { get; } = new();
 }
+
+/// <summary>Result of the latest "pull all" run, shown next to each project in the sidebar.</summary>
+public enum PullState { None, Queued, Pulling, Succeeded, Failed }
 
 public sealed class DashboardView : UserControl
 {
