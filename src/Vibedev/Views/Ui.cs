@@ -8,6 +8,11 @@ public static class Ui
 {
     public static SolidColorBrush Brush(string hex) => (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
     public static TextBlock Text(string text, double size = 13, string color = "#E4E4E7") => new() { Text = text, FontSize = size, Foreground = Brush(color), TextWrapping = TextWrapping.Wrap };
+    /// <summary>Small uppercase heading for a panel section (FILES, STAGED, …).</summary>
+    public static TextBlock Section(string text)
+    {
+        var label = Text(text, 11, "#9898A6"); label.FontWeight = FontWeights.SemiBold; label.VerticalAlignment = VerticalAlignment.Center; return label;
+    }
     public static Button Button(string title, Action action, bool accent = false)
     {
         var b = new Button { Content = title, ToolTip = title switch { "×" => "Close", "Split →" => "Split the project panel horizontally", "Split ↓" => "Split the project panel vertically", "↗ Float" => "Detach this project into a floating window", "▶ Run" => "Save files and run the selected launch configuration", _ => title } };

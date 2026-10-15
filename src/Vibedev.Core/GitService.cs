@@ -3,7 +3,24 @@ using System.Text;
 
 namespace Vibedev.Core;
 
-public sealed record GitStatus(bool IsRepository, string Branch, int Changes, string? Error = null);
+public sealed record GitStatus(bool IsRepository, string Branch, int Changes, string? Error = null)
+{
+    /// <summary>Compact branch label: "main...origin/main [ahead 1, behind 2]" becomes "main ↑1 ↓2".</summary>
+    public string Summary => IsRepository ? SummarizeBranch(Branch) : Branch;
+    public static string SummarizeBranch(string header)
+    {
+        var bracket = header.IndexOf(" [", StringComparison.Ordinal);
+        var name = bracket >= 0 ? header[..bracket] : header;
+        var dots = name.IndexOf("...", StringComparison.Ordinal);
+        if (dots >= 0) name = name[..dots];
+        if (bracket < 0) return name;
+        var tracking = header[(bracket + 2)..].TrimEnd(']').Split(", ").Select(part =>
+            part.StartsWith("ahead ", StringComparison.Ordinal) ? "↑" + part[6..] :
+            part.StartsWith("behind ", StringComparison.Ordinal) ? "↓" + part[7..] :
+            part == "gone" ? "upstream gone" : part);
+        return name + " " + string.Join(" ", tracking);
+    }
+}
 public sealed record GitCommit(string Hash, string ShortHash, string Subject, string Author, DateTimeOffset Date);
 public sealed record GitCommitFile(string Path, string? OriginalPath, char Status);
 public sealed record GitFileChange(string Path, string? OriginalPath, char IndexStatus, char WorkTreeStatus)

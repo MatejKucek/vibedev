@@ -17,7 +17,7 @@ internal sealed class ProjectTasksView : UserControl
         var root = new DockPanel { Background = Ui.Brush("#1D1D21") };
         var header = new DockPanel { Margin = new(10, 8, 4, 8) };
         var reload = Ui.Button("↻", refresh); reload.Padding = new(6, 2, 6, 2); reload.ToolTip = "Refresh open tasks";
-        DockPanel.SetDock(reload, Dock.Right); header.Children.Add(reload); header.Children.Add(Ui.Text("OPEN TASKS", 10, "#9898A6"));
+        DockPanel.SetDock(reload, Dock.Right); header.Children.Add(reload); header.Children.Add(Ui.Section("OPEN TASKS"));
         DockPanel.SetDock(header, Dock.Top); root.Children.Add(header);
         var content = new Grid(); content.Children.Add(files); empty.Margin = new(14); content.Children.Add(empty);
         root.Children.Add(content); Content = root;

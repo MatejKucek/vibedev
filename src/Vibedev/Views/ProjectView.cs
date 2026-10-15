@@ -86,7 +86,7 @@ public sealed class ProjectView : UserControl, IDisposable
         Grid.SetRow(tools, 1); root.Children.Add(tools);
         var work = new Grid(); work.ColumnDefinitions.Add(new() { Width = new(200), MinWidth = 130 }); work.ColumnDefinitions.Add(new() { Width = new(4) }); work.ColumnDefinitions.Add(new() { MinWidth = 120 });
         var explorer = new DockPanel { Background = Ui.Brush("#1D1D21") };
-        var fileHeader = new DockPanel { Margin = new(10, 8, 4, 8) }; var refresh = Ui.Button("↻", RefreshTree); refresh.Padding = new(6, 2, 6, 2); refresh.ToolTip = "Refresh files, preserving expanded folders"; DockPanel.SetDock(refresh, Dock.Right); fileHeader.Children.Add(refresh); fileHeader.Children.Add(Ui.Text("FILES", 10, "#9898A6")); DockPanel.SetDock(fileHeader, Dock.Top); explorer.Children.Add(fileHeader); explorer.Children.Add(tree);
+        var fileHeader = new DockPanel { Margin = new(10, 8, 4, 8) }; var refresh = Ui.Button("↻", RefreshTree); refresh.Padding = new(6, 2, 6, 2); refresh.ToolTip = "Refresh files, preserving expanded folders"; DockPanel.SetDock(refresh, Dock.Right); fileHeader.Children.Add(refresh); fileHeader.Children.Add(Ui.Section("FILES")); DockPanel.SetDock(fileHeader, Dock.Top); explorer.Children.Add(fileHeader); explorer.Children.Add(tree);
         navigation.Style = (Style)Application.Current.FindResource(typeof(TabControl));
         navigation.Items.Add(new TabItem { Header = "Explorer", Content = explorer, ToolTip = "Browse project files", Style = (Style)Application.Current.FindResource(typeof(TabItem)), Padding = new Thickness(8, 8, 8, 8) });
         navigation.Items.Add(new TabItem { Header = "Search", Content = search, ToolTip = "Search files and contents (Ctrl+Shift+F), or filenames (Ctrl+P)", Style = (Style)Application.Current.FindResource(typeof(TabItem)), Padding = new Thickness(8, 8, 8, 8) });
@@ -211,7 +211,7 @@ public sealed class ProjectView : UserControl, IDisposable
         if (disposed) return;
         var existing = tabs.Items.OfType<GitDiffTab>().FirstOrDefault(t => t.Key == key);
         if (existing is not null) { existing.Editor.Text = text; tabs.SelectedItem = existing; return; }
-        var diff = new GitDiffTab(key, Path.GetFileName(file.Path) + (staged ? " · staged diff" : " · diff"), text, file, staged, t => { tabs.Items.Remove(t); placeholder.Visibility = tabs.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed; });
+        var diff = new GitDiffTab(key, Path.GetFileName(file.Path), staged ? "staged" : null, text, file, staged, t => { tabs.Items.Remove(t); placeholder.Visibility = tabs.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed; });
         tabs.Items.Add(diff); tabs.SelectedItem = diff; placeholder.Visibility = Visibility.Collapsed;
     }
     internal async Task ShowCommitDiffAsync(GitCommit commit, GitCommitFile file, CancellationToken cancellation = default)
@@ -223,7 +223,7 @@ public sealed class ProjectView : UserControl, IDisposable
         if (disposed) return;
         existing = tabs.Items.OfType<GitDiffTab>().FirstOrDefault(t => t.Key == key);
         if (existing is not null) { tabs.SelectedItem = existing; return; }
-        var diff = new GitDiffTab(key, $"{Path.GetFileName(file.Path)} · {commit.ShortHash} diff", text, null, false, t => { tabs.Items.Remove(t); placeholder.Visibility = tabs.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed; });
+        var diff = new GitDiffTab(key, Path.GetFileName(file.Path), commit.ShortHash, text, null, false, t => { tabs.Items.Remove(t); placeholder.Visibility = tabs.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed; });
         tabs.Items.Add(diff); tabs.SelectedItem = diff; placeholder.Visibility = Visibility.Collapsed;
     }
     internal async Task RefreshSelectedDiffAsync(IReadOnlyList<GitFileChange> files)

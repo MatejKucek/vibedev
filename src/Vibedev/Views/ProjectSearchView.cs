@@ -22,7 +22,7 @@ public sealed class ProjectSearchView : UserControl
         this.project = project;
         var root = new DockPanel { Background = Ui.Brush("#1D1D21") };
         var controls = new StackPanel { Margin = new(10, 12, 10, 8) };
-        var heading = Ui.Text("FIND IN PROJECT", 10, "#9898A6"); heading.Margin = new(0, 0, 0, 10); controls.Children.Add(heading);
+        var heading = Ui.Section("FIND IN PROJECT"); heading.Margin = new(0, 0, 0, 10); controls.Children.Add(heading);
         controls.Children.Add(query); controls.Children.Add(mode); controls.Children.Add(summary);
         DockPanel.SetDock(controls, Dock.Top); root.Children.Add(controls); root.Children.Add(results); Content = root;
         var template = new DataTemplate(typeof(ProjectSearchHit));

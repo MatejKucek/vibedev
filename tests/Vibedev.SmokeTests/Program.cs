@@ -212,7 +212,9 @@ internal static partial class Program
             "Dashboard projects stay in one scrollable row when the available width is narrow");
         dashboardList.Width = double.NaN; window.UpdateLayout();
         window.Documents().Single(d => d.Content is ProjectView v && v.Project == window.Projects[1]).Close();
-        firstDoc.IsActive = true; await Task.Delay(250); await CaptureAsync(window, "editor.png");
+        firstDoc.IsActive = true; await Task.Delay(250);
+        Check(!Descendants<TextBlock>(window).Any(t => t.Text.StartsWith("System.Windows.", StringComparison.Ordinal)), "Tab headers render their titles, not element type names");
+        await CaptureAsync(window, "editor.png");
         firstView.ShowSearch();
         var consoleHits = await firstView.Search.FindForTestAsync("Console", ProjectSearchMode.Both);
         await Task.Delay(500);

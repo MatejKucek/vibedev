@@ -42,18 +42,20 @@ public sealed class EditorTab : TabItem, IDisposable
     {
         Style = (Style)Application.Current.FindResource(typeof(TabItem));
         this.file = file; this.changed = changed;
-        title = Ui.Text(Path.GetFileName(file.Path), 12); title.TextWrapping = TextWrapping.NoWrap;
+        title = new TextBlock { Text = Path.GetFileName(file.Path), FontSize = 12, TextWrapping = TextWrapping.NoWrap };
+        title.SetBinding(TextBlock.ForegroundProperty, new System.Windows.Data.Binding(nameof(Foreground)) { Source = this });
         var x = Ui.Button("×", () => close(this)); x.Padding = new(5, 0, 5, 0); x.Margin = new(10, 0, 0, 0); x.BorderThickness = new(0); x.Background = Brushes.Transparent;
         Header = Ui.Row(title, x); ToolTip = file.Path;
         x.ToolTip = "Close file (Ctrl+W)";
         editor = new TextEditor
         {
             Text = file.Text, Background = Ui.Brush("#18181B"), Foreground = Ui.Brush("#D4D4DC"),
-            FontFamily = new("Cascadia Code, Consolas"), FontSize = 13, ShowLineNumbers = true,
-            LineNumbersForeground = Ui.Brush("#656573"), Padding = new(8, 10, 8, 10),
+            FontFamily = new("Cascadia Code, Consolas"), FontSize = 13,
+            Padding = new(8, 10, 8, 10),
             HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             SyntaxHighlighting = Highlight(file.Path)
         };
+        EditorGutter.Apply(editor);
         editor.Options.ConvertTabsToSpaces = true; editor.Options.IndentationSize = 4; editor.Options.EnableEmailHyperlinks = false; editor.Options.EnableHyperlinks = false;
         editor.TextArea.SelectionBrush = Ui.Brush("#55416F"); editor.TextArea.Caret.CaretBrush = Ui.Brush("#A78BFA");
         if (Path.GetExtension(file.Path).Equals(".cs", StringComparison.OrdinalIgnoreCase)) editor.TextArea.IndentationStrategy = new CSharpIndentationStrategy(editor.Options);
@@ -89,7 +91,7 @@ public sealed class EditorTab : TabItem, IDisposable
             previewButton.ToolTip = "Read the rendered Markdown, including unsaved edits";
             editButton.ToolTip = "Edit Markdown source";
             var buttons = Ui.Row(previewButton, editButton); DockPanel.SetDock(buttons, Dock.Right); modes.Children.Add(buttons);
-            var label = Ui.Text("MARKDOWN", 10, "#9898A6"); label.VerticalAlignment = VerticalAlignment.Center; modes.Children.Add(label);
+            var label = Ui.Section("MARKDOWN"); label.VerticalAlignment = VerticalAlignment.Center; modes.Children.Add(label);
             layout.Children.Add(modes);
             ShowMarkdownPreview(true);
         }

@@ -103,7 +103,7 @@ public partial class MainWindow : Window
         Dock.DocumentClosed += (_, e) =>
         {
             if (e.Document.ContentId is { } id && views.Remove(id, out var view)) view.Dispose();
-            if (!closing) dashboard.Refresh();
+            if (!closing) { dashboard.Refresh(); UpdateSidebarActiveProject(); }
         };
         Dock.ActiveContentChanged += (_, _) =>
         {
@@ -260,6 +260,25 @@ public partial class MainWindow : Window
     {
         foreach (var document in Documents())
             if (document.Content is ProjectView view) view.SetActive(document.IsActive);
+        UpdateSidebarActiveProject();
+    }
+    // Keep the last active project highlighted while focus is in the terminal or sidebar.
+    private ProjectState? sidebarActiveProject;
+    internal ProjectState? SidebarActiveProject => sidebarActiveProject;
+    private void UpdateSidebarActiveProject()
+    {
+        var open = Documents().Select(d => d.Content).OfType<ProjectView>().Select(v => v.Project).ToHashSet();
+        sidebarActiveProject = (Documents().FirstOrDefault(d => d.IsActive)?.Content as ProjectView)?.Project
+            ?? (sidebarActiveProject is not null && open.Contains(sidebarActiveProject) ? sidebarActiveProject : null);
+        foreach (var item in ProjectList.Items.OfType<ListBoxItem>())
+        {
+            if (item.Content is not Border { Child: StackPanel { Children: [TextBlock name, ..] } } frame) continue;
+            var active = item.Tag == sidebarActiveProject;
+            frame.Background = active ? Ui.Brush("#2C2838") : System.Windows.Media.Brushes.Transparent;
+            frame.BorderBrush = active ? Ui.Brush("#A78BFA") : System.Windows.Media.Brushes.Transparent;
+            name.FontWeight = active ? FontWeights.SemiBold : FontWeights.Normal;
+            name.Foreground = Ui.Brush(active || open.Contains((ProjectState)item.Tag) ? "#F4F4F5" : "#D4D4DC");
+        }
     }
     internal void HandleFocusKey(KeyEventArgs e)
     {
@@ -652,8 +671,9 @@ public partial class MainWindow : Window
         foreach (var p in Projects.Where(p => p.Entry.Name.Contains(ProjectFilter.Text, StringComparison.OrdinalIgnoreCase) || p.Entry.Path.Contains(ProjectFilter.Text, StringComparison.OrdinalIgnoreCase)))
         {
             var row = new StackPanel(); row.Children.Add(Ui.Text("{ }  " + p.Entry.Name, 12));
-            var branch = Ui.Text(p.Failed ? p.Activity : p.Git?.Branch ?? "Local project", 10, p.Failed ? "#F87171" : "#777784"); branch.TextTrimming = TextTrimming.CharacterEllipsis; branch.TextWrapping = TextWrapping.NoWrap; branch.Margin = new(21, 4, 0, 0); row.Children.Add(branch);
-            var item = new ListBoxItem { Content = row, Tag = p, ToolTip = p.Entry.Path + "\nClick to open; drag out to create a new project window" }; ProjectList.Items.Add(item); if (p == selected) ProjectList.SelectedItem = item;
+            var branch = Ui.Text(p.Failed ? p.Activity : p.Git?.Summary ?? "Local project", 11, p.Failed ? "#F87171" : "#A1A1AA"); branch.TextTrimming = TextTrimming.CharacterEllipsis; branch.TextWrapping = TextWrapping.NoWrap; branch.Margin = new(21, 3, 0, 0); row.Children.Add(branch);
+            var frame = new Border { Child = row, Padding = new(8, 8, 10, 8), BorderThickness = new(2, 0, 0, 0), BorderBrush = System.Windows.Media.Brushes.Transparent, CornerRadius = new(3) };
+            var item = new ListBoxItem { Content = frame, Tag = p, Padding = new(0), Margin = new(0, 0, 0, 2), ToolTip = p.Entry.Path + (p.Git?.IsRepository == true ? "\n" + p.Git.Branch : "") + "\nClick to open; drag out to create a new project window" }; ProjectList.Items.Add(item); if (p == selected) ProjectList.SelectedItem = item;
             ProjectDragHandle.Attach(item, point =>
             {
                 if (!closing && Projects.Contains(p) && Dock.AllowFloatingWindows) DragProjectDocument(OpenProjectWindow(p), point);
@@ -661,6 +681,7 @@ public partial class MainWindow : Window
             item.ContextMenu = CreateSidebarProjectMenu(p);
         }
         listing = false; ProjectCount.Text = Projects.Count.ToString(); ScanRootLabel.Text = state.ScanRoot ?? "Find repositories in subfolders";
+        UpdateSidebarActiveProject();
         dashboard.Refresh(); foreach (var view in views.Values.ToArray()) view.RefreshState();
     }
     internal ContextMenu CreateSidebarProjectMenu(ProjectState project)

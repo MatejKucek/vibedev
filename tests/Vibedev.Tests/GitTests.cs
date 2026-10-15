@@ -14,6 +14,14 @@ public sealed class GitTests
         await Git(path, "config", "commit.gpgsign", "false"); await Git(path, "config", "pull.rebase", "false");
         await Git(path, "config", "core.hooksPath", System.IO.Path.Combine(path, ".no-hooks"));
     }
+    [Theory]
+    [InlineData("main", "main")]
+    [InlineData("main...origin/main", "main")]
+    [InlineData("main...origin/main [ahead 1]", "main ↑1")]
+    [InlineData("feature/x...origin/feature/x [ahead 2, behind 3]", "feature/x ↑2 ↓3")]
+    [InlineData("main...origin/main [gone]", "main upstream gone")]
+    [InlineData("No commits yet on main", "No commits yet on main")]
+    public void BranchSummaryIsCompact(string header, string expected) => Assert.Equal(expected, GitStatus.SummarizeBranch(header));
     [Fact]
     public async Task CommitAllPushAndPullWorkUsingExistingGit()
     {
