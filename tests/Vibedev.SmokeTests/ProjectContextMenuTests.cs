@@ -2,6 +2,7 @@ using System.IO;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 using AvalonDock.Layout;
 using Vibedev;
 using Vibedev.Core;
@@ -109,6 +110,20 @@ internal static partial class Program
         ClickMenu(menu, "Hide dashboard"); window.UpdateLayout();
         Check(!window.DashboardVisible && window.Documents().Contains(localDocument), "Dashboard background Hide preserves project panels");
         window.ToggleDashboard();
+
+        var sidebarItem = window.ProjectList.Items.OfType<ListBoxItem>().Single(i => i.Tag == project);
+        menu = await OpenMenuAsync(sidebarItem);
+        Check(MenuItemNamed(menu, "Open project").IsEnabled && MenuItemNamed(menu, "Remove from workspace").IsEnabled,
+            "Projects sidebar menu exposes open and remove actions");
+        CheckMenuText(menu);
+        Check(MenuItemNamed(menu, "Open project").Foreground is SolidColorBrush { Color: var light } && light.R > 0xC0,
+            "Sidebar menu text uses the light-on-dark theme");
+        ClickMenu(menu, "Remove from workspace"); await Task.Delay(200);
+        Check(!window.Projects.Contains(project) && window.Documents().Contains(localDocument) && !window.ProjectList.Items.OfType<ListBoxItem>().Any(i => i.Tag == project),
+            "Sidebar Remove unregisters the project and keeps other panels");
+        menu = await OpenMenuAsync((ProjectView)localDocument.Content);
+        ClickMenu(menu, "Remove from workspace"); await Task.Delay(200);
+        Check(window.Projects.Count == 0 && !window.Documents().Any(), "Panel Remove closes the panel and unregisters its project");
         File.WriteAllLines(Path.Combine(OutputDirectory, "context-menu-results.txt"), Results);
     }
 

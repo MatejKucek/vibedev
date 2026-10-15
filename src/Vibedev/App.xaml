@@ -15,6 +15,7 @@
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="ToolTip"><Border Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Padding="{TemplateBinding Padding}"><ContentPresenter/></Border></ControlTemplate></Setter.Value></Setter>
         </Style>
         <Style x:Key="ProjectMenuItem" TargetType="MenuItem">
+            <Setter Property="Foreground" Value="#E4E4E7"/><Setter Property="Padding" Value="10,6"/><Setter Property="ToolTipService.ShowOnDisabled" Value="True"/>
             <Setter Property="ItemContainerStyle" Value="{DynamicResource ProjectMenuItem}"/>
             <Setter Property="HeaderTemplate">
                 <Setter.Value>
@@ -23,10 +24,45 @@
                     </DataTemplate>
                 </Setter.Value>
             </Setter>
+            <Setter Property="Template"><Setter.Value>
+                <ControlTemplate TargetType="MenuItem">
+                    <Grid SnapsToDevicePixels="True">
+                        <Border x:Name="Row" Background="Transparent" CornerRadius="3" Padding="{TemplateBinding Padding}">
+                            <Grid><Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <ContentPresenter ContentSource="Header" VerticalAlignment="Center" MinWidth="150"/>
+                                <Path x:Name="Arrow" Grid.Column="1" Data="M 0,0 L 4,4 L 0,8" Stroke="{TemplateBinding Foreground}" StrokeThickness="1.3" Margin="14,0,0,0" VerticalAlignment="Center" Visibility="Collapsed"/>
+                            </Grid>
+                        </Border>
+                        <Popup x:Name="PART_Popup" Placement="Right" HorizontalOffset="4" VerticalOffset="-4" IsOpen="{Binding IsSubmenuOpen, RelativeSource={RelativeSource TemplatedParent}}" AllowsTransparency="True" Focusable="False" PopupAnimation="Fade">
+                            <Border Background="#24242A" BorderBrush="#605272" BorderThickness="1" CornerRadius="4" Padding="3">
+                                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" KeyboardNavigation.TabNavigation="Cycle"/></ScrollViewer>
+                            </Border>
+                        </Popup>
+                    </Grid>
+                    <ControlTemplate.Triggers>
+                        <Trigger Property="HasItems" Value="True"><Setter TargetName="Arrow" Property="Visibility" Value="Visible"/></Trigger>
+                        <Trigger Property="IsSubmenuOpen" Value="True"><Setter TargetName="Row" Property="Background" Value="#343044"/></Trigger>
+                        <Trigger Property="IsHighlighted" Value="True"><Setter TargetName="Row" Property="Background" Value="#49405E"/></Trigger>
+                        <Trigger Property="IsEnabled" Value="False"><Setter Property="Foreground" Value="#6B6B78"/></Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value></Setter>
         </Style>
         <Style x:Key="ProjectContextMenu" TargetType="ContextMenu">
-            <Setter Property="Foreground" Value="{DynamicResource {x:Static SystemColors.MenuTextBrushKey}}"/>
+            <Setter Property="Foreground" Value="#E4E4E7"/><Setter Property="FontFamily" Value="Segoe UI"/><Setter Property="FontSize" Value="12"/>
+            <Setter Property="Template"><Setter.Value>
+                <ControlTemplate TargetType="ContextMenu">
+                    <Border Background="#24242A" BorderBrush="#605272" BorderThickness="1" CornerRadius="4" Padding="3">
+                        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"><ItemsPresenter KeyboardNavigation.DirectionalNavigation="Cycle" KeyboardNavigation.TabNavigation="Cycle"/></ScrollViewer>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value></Setter>
         </Style>
+        <Style x:Key="{x:Static MenuItem.SeparatorStyleKey}" TargetType="Separator">
+            <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Separator"><Border Height="1" Margin="6,4" Background="#3C3C44"/></ControlTemplate></Setter.Value></Setter>
+        </Style>
+        <Style TargetType="ContextMenu" BasedOn="{StaticResource ProjectContextMenu}"/>
+        <Style TargetType="MenuItem" BasedOn="{StaticResource ProjectMenuItem}"/>
         <Style TargetType="Button">
             <Setter Property="Foreground" Value="#D4D4DC"/><Setter Property="Background" Value="#2A2A30"/><Setter Property="BorderBrush" Value="#3C3C44"/><Setter Property="BorderThickness" Value="1"/><Setter Property="Padding" Value="12,7"/><Setter Property="Cursor" Value="Hand"/><Setter Property="Margin" Value="0,0,6,0"/><Setter Property="VerticalContentAlignment" Value="Center"/>
             <Setter Property="Template"><Setter.Value><ControlTemplate TargetType="Button"><Border x:Name="Chrome" Background="{TemplateBinding Background}" BorderBrush="{TemplateBinding BorderBrush}" BorderThickness="{TemplateBinding BorderThickness}" CornerRadius="4" Padding="{TemplateBinding Padding}"><ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/></Border><ControlTemplate.Triggers><Trigger Property="IsMouseOver" Value="True"><Setter TargetName="Chrome" Property="Background" Value="#3B354B"/><Setter TargetName="Chrome" Property="BorderBrush" Value="#8B70C8"/></Trigger><Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.4"/></Trigger><Trigger Property="IsKeyboardFocused" Value="True"><Setter TargetName="Chrome" Property="BorderBrush" Value="#A78BFA"/></Trigger></ControlTemplate.Triggers></ControlTemplate></Setter.Value></Setter>

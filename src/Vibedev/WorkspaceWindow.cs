@@ -377,6 +377,11 @@ public partial class MainWindow : Window
             menu.Items.Add(new Separator());
         }
         var close = new MenuItem { Header = "Close project", IsEnabled = document.CanClose }; close.Click += (_, _) => document.Close(); menu.Items.Add(close);
+        if (document.Content is ProjectView owner)
+        {
+            var remove = new MenuItem { Header = "Remove from workspace", ToolTip = "Close its panels and unregister it; files on disk are kept", IsEnabled = !owner.Project.Busy && RunningProject != owner.Project };
+            remove.Click += async (_, _) => await RemoveProjectAsync(owner.Project); menu.Items.Add(remove);
+        }
         foreach (var item in menu.Items.OfType<MenuItem>()) item.Style = (Style)FindResource("ProjectMenuItem");
     }
     internal async Task<bool> ReplaceProjectAsync(LayoutDocument document, ProjectState project)
@@ -653,12 +658,27 @@ public partial class MainWindow : Window
             {
                 if (!closing && Projects.Contains(p) && Dock.AllowFloatingWindows) DragProjectDocument(OpenProjectWindow(p), point);
             }, () => { if (ProjectList.SelectedItem == item) OpenProject(p); else ProjectList.SelectedItem = item; });
-            var menu = new ContextMenu(); var remove = new MenuItem { Header = "Remove from workspace" }; remove.Click += async (_, _) => await RemoveProjectAsync(p); menu.Items.Add(remove); item.ContextMenu = menu;
+            item.ContextMenu = CreateSidebarProjectMenu(p);
         }
         listing = false; ProjectCount.Text = Projects.Count.ToString(); ScanRootLabel.Text = state.ScanRoot ?? "Find repositories in subfolders";
         dashboard.Refresh(); foreach (var view in views.Values.ToArray()) view.RefreshState();
     }
-    private async Task RemoveProjectAsync(ProjectState project)
+    internal ContextMenu CreateSidebarProjectMenu(ProjectState project)
+    {
+        var menu = new ContextMenu { Style = (Style)FindResource("ProjectContextMenu") };
+        menu.Opened += (_, _) =>
+        {
+            menu.Items.Clear();
+            var open = new MenuItem { Header = "Open project" }; open.Click += (_, _) => OpenProject(project); menu.Items.Add(open);
+            var window = new MenuItem { Header = "Open in new window", IsEnabled = Dock.AllowFloatingWindows }; window.Click += (_, _) => OpenProjectWindow(project); menu.Items.Add(window);
+            menu.Items.Add(new Separator());
+            var remove = new MenuItem { Header = "Remove from workspace", ToolTip = "Close its panels and unregister it; files on disk are kept", IsEnabled = !project.Busy && RunningProject != project };
+            remove.Click += async (_, _) => await RemoveProjectAsync(project); menu.Items.Add(remove);
+            foreach (var item in menu.Items.OfType<MenuItem>()) item.Style = (Style)FindResource("ProjectMenuItem");
+        };
+        return menu;
+    }
+    internal async Task RemoveProjectAsync(ProjectState project)
     {
         if (project.Busy || RunningProject == project) { SetStatus("Wait for this project's operation to finish before removing it."); return; }
         var docs = Documents().Where(d => d.Content is ProjectView v && v.Project == project).ToArray();
