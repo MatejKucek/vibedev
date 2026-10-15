@@ -33,6 +33,7 @@ public partial class MainWindow : Window
     private readonly HashSet<LayoutDocument> allowedClose = [];
     private readonly HashSet<LayoutDocument> replacing = [];
     private readonly Dictionary<ProjectState, TextBlock> sidebarTaskCounts = [];
+    private readonly Dictionary<ProjectState, System.Windows.Shapes.Ellipse> sidebarIndicators = [];
     private readonly List<(int Offset, string Directory)> outputContexts = [];
     private readonly DispatcherTimer refreshTimer;
     private readonly DispatcherTimer fileStatusTimer;
@@ -162,14 +163,14 @@ public partial class MainWindow : Window
                 changed |= !activity.Sessions.SequenceEqual(update.Sessions) || activity.Warning != update.Warning;
                 activity.Update(update.Sessions, update.Warning);
             }
-            if (changed) dashboard.Refresh();
+            if (changed) RefreshClaudeIndicators();
         }
         catch (Exception ex)
         {
             if (!closing)
             {
                 foreach (var project in projects) project.Claude.Update(project.Claude.Sessions, "Cannot refresh Claude sessions: " + ex.Message);
-                dashboard.Refresh();
+                RefreshClaudeIndicators();
             }
         }
         finally { readingClaude = false; }
@@ -180,6 +181,11 @@ public partial class MainWindow : Window
         project.OpenTaskCount = count;
         if (closing) return;
         if (sidebarTaskCounts.TryGetValue(project, out var label)) SetTaskCount(label, count);
+        RefreshClaudeIndicators();
+    }
+    private void RefreshClaudeIndicators()
+    {
+        foreach (var (project, indicator) in sidebarIndicators) DashboardView.UpdateIndicator(indicator, project);
         dashboard.Refresh();
     }
     private void ConfigureProjectPanes()
@@ -279,7 +285,7 @@ public partial class MainWindow : Window
             ?? (sidebarActiveProject is not null && open.Contains(sidebarActiveProject) ? sidebarActiveProject : null);
         foreach (var item in ProjectList.Items.OfType<ListBoxItem>())
         {
-            if (item.Content is not Border { Child: Grid { Children: [StackPanel { Children: [TextBlock name, ..] }, ..] } } frame) continue;
+            if (item.Content is not Border { Child: Grid { Children: [StackPanel { Children: [DockPanel { Children: [_, TextBlock name] }, ..] }, ..] } } frame) continue;
             var active = item.Tag == sidebarActiveProject;
             frame.Background = active ? Ui.Brush("#2C2838") : System.Windows.Media.Brushes.Transparent;
             frame.BorderBrush = active ? Ui.Brush("#A78BFA") : System.Windows.Media.Brushes.Transparent;
@@ -702,11 +708,13 @@ public partial class MainWindow : Window
         listing = true;
         var selected = (ProjectList.SelectedItem as ListBoxItem)?.Tag as ProjectState;
         ProjectList.Items.Clear();
-        sidebarTaskCounts.Clear();
+        sidebarTaskCounts.Clear(); sidebarIndicators.Clear();
         foreach (var p in ListedProjects)
         {
-            var text = new StackPanel(); var title = Ui.Text("{ }  " + p.Entry.Name, 12); title.TextTrimming = TextTrimming.CharacterEllipsis; title.TextWrapping = TextWrapping.NoWrap; text.Children.Add(title);
-            var branch = Ui.Text(p.Failed ? p.Activity : p.Git?.Summary ?? "Local project", 11, p.Failed ? "#F87171" : "#A1A1AA"); branch.TextTrimming = TextTrimming.CharacterEllipsis; branch.TextWrapping = TextWrapping.NoWrap; branch.Margin = new(21, 3, 0, 0); text.Children.Add(branch);
+            var text = new StackPanel(); var title = Ui.Text(p.Entry.Name, 12); title.TextTrimming = TextTrimming.CharacterEllipsis; title.TextWrapping = TextWrapping.NoWrap;
+            var indicator = DashboardView.CreateIndicator(p); sidebarIndicators[p] = indicator;
+            var heading = new DockPanel(); heading.Children.Add(indicator); heading.Children.Add(title); text.Children.Add(heading);
+            var branch = Ui.Text(p.Failed ? p.Activity : p.Git?.Summary ?? "Local project", 11, p.Failed ? "#F87171" : "#A1A1AA"); branch.TextTrimming = TextTrimming.CharacterEllipsis; branch.TextWrapping = TextWrapping.NoWrap; branch.Margin = new(18, 3, 0, 0); text.Children.Add(branch);
             var row = new Grid { ColumnDefinitions = { new() { Width = new GridLength(1, GridUnitType.Star) }, new() { Width = new GridLength(24) }, new() { Width = new GridLength(30) }, new() { Width = new GridLength(30) } } };
             row.Children.Add(text);
             var pull = PullIndicator(p); Grid.SetColumn(pull, 1); row.Children.Add(pull);

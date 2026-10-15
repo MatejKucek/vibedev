@@ -59,14 +59,7 @@ public sealed class DashboardView : UserControl
         {
             var project = DisplayedProjects[index];
             var row = new Grid(); for (var column = 0; column < 4; column++) row.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
-            var light = project.Claude.Light(project.OpenTaskCount);
-            var description = project.Claude.Description(project.OpenTaskCount);
-            var indicator = new Ellipse { Width = 10, Height = 10, Margin = new(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center,
-                Tag = light, ToolTip = description, Fill = Ui.Brush(light switch {
-                    ClaudeActivityLight.Red => "#F87171", ClaudeActivityLight.Blue => "#60A5FA",
-                    ClaudeActivityLight.Orange => "#FB923C", ClaudeActivityLight.Green => "#4ADE80", _ => "#777784" }) };
-            AutomationProperties.SetName(indicator, project.Entry.Name + ": " + description);
-            row.Children.Add(indicator);
+            row.Children.Add(CreateIndicator(project));
             var name = Ui.Text(project.Entry.Name, 12); name.TextWrapping = TextWrapping.NoWrap; name.TextTrimming = TextTrimming.CharacterEllipsis; name.MaxWidth = 180; name.VerticalAlignment = VerticalAlignment.Center; Grid.SetColumn(name, 1); row.Children.Add(name);
             var branch = Ui.Text(project.Git?.Summary ?? "Local project", 11, "#A1A1AA"); branch.TextWrapping = TextWrapping.NoWrap; branch.TextTrimming = TextTrimming.CharacterEllipsis; branch.MaxWidth = 140; branch.VerticalAlignment = VerticalAlignment.Center; branch.Margin = new(8, 0, 8, 0); branch.ToolTip = project.Git?.Branch; Grid.SetColumn(branch, 2); row.Children.Add(branch);
             var state = project.Busy ? project.Activity : project.Failed ? "Failed" : project.Git?.Changes > 0 ? $"● {project.Git.Changes} changes" : project.Git?.IsRepository == true ? "Clean" : "Local";
@@ -79,5 +72,21 @@ public sealed class DashboardView : UserControl
         list.SelectionChanged += (_, _) => { if (list.SelectedItem is ListBoxItem { Tag: ProjectState project }) main.OpenProject(project); };
         if (DisplayedProjects.Count == 0) { var empty = Ui.Text("Open a project from the sidebar or add a project.", 12, "#777784"); empty.VerticalAlignment = VerticalAlignment.Center; body.Children.Add(empty); } else body.Children.Add(list);
         Content = body;
+    }
+    /// <summary>Claude activity "traffic light" dot, shared by the dashboard and the projects sidebar.</summary>
+    internal static Ellipse CreateIndicator(ProjectState project)
+    {
+        var indicator = new Ellipse { Width = 10, Height = 10, Margin = new(0, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
+        UpdateIndicator(indicator, project); return indicator;
+    }
+    internal static void UpdateIndicator(Ellipse indicator, ProjectState project)
+    {
+        var light = project.Claude.Light(project.OpenTaskCount);
+        var description = project.Claude.Description(project.OpenTaskCount);
+        indicator.Tag = light; indicator.ToolTip = description;
+        indicator.Fill = Ui.Brush(light switch {
+            ClaudeActivityLight.Red => "#F87171", ClaudeActivityLight.Blue => "#60A5FA",
+            ClaudeActivityLight.Orange => "#FB923C", ClaudeActivityLight.Green => "#4ADE80", _ => "#777784" });
+        AutomationProperties.SetName(indicator, project.Entry.Name + ": " + description);
     }
 }
