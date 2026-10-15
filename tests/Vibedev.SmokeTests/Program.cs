@@ -34,7 +34,9 @@ internal static partial class Program
             if (started) return; started = true;
             try
             {
-                if (args.Contains("--project-drag")) await ExecuteProjectDragAsync(window, root);
+                if (args.Contains("--markdown")) await ExecuteMarkdownAsync(window, root);
+                else if (args.Contains("--polish")) await ExecutePolishAsync(window, root);
+                else if (args.Contains("--project-drag")) await ExecuteProjectDragAsync(window, root);
                 else if (args.Contains("--dashboard")) await ExecuteDashboardAsync(window, root);
                 else if (args.Contains("--focus-mode")) await ExecuteFocusModeAsync(window, root);
                 else if (args.Contains("--context-menu")) await ExecuteProjectContextMenusAsync(window, root);
@@ -366,6 +368,15 @@ internal static partial class Program
     }
     private static async Task CaptureAsync(MainWindow window, string name)
     {
+        var previews = Descendants<MarkdownPreview>(window).Where(p => p.IsVisible && p.IsReady).ToArray();
+        var previewContents = new List<(MarkdownPreview Preview, object Content)>();
+        foreach (var preview in previews)
+        {
+            using var memory = new MemoryStream(); await preview.CaptureAsync(memory); memory.Position = 0;
+            var bitmap = new BitmapImage(); bitmap.BeginInit(); bitmap.CacheOption = BitmapCacheOption.OnLoad; bitmap.StreamSource = memory; bitmap.EndInit();
+            previewContents.Add((preview, preview.Content));
+            preview.Content = new Image { Source = bitmap, Stretch = Stretch.Fill };
+        }
         // Capture the WebView surface separately; native composition surfaces are not in RenderTargetBitmap.
         var terminal = window.TerminalHost.Children.OfType<TerminalControl>().FirstOrDefault();
         if (terminal is not null && window.BottomTabs.SelectedIndex == 0)
@@ -380,5 +391,6 @@ internal static partial class Program
         var encoder = new PngBitmapEncoder(); encoder.Frames.Add(BitmapFrame.Create(render));
         using (var file = File.Create(Path.Combine(OutputDirectory, name))) encoder.Save(file);
         if (terminal is not null) { window.TerminalHost.Children.Clear(); window.TerminalHost.Children.Add(terminal); }
+        foreach (var (preview, original) in previewContents) preview.Content = original;
     }
 }

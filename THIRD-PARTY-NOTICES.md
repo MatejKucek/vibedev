@@ -6,6 +6,7 @@ third-party components listed below.
 
 - **AvalonDock**, theme and serializer — MS-PL. https://github.com/Dirkster99/AvalonDock/blob/master/LICENSE
 - **AvalonEdit** — MIT. https://github.com/icsharpcode/AvalonEdit/blob/master/LICENSE
+- **Markdig** — BSD-2-Clause. Markdown parser. https://github.com/xoofx/markdig/blob/main/license.txt
 - **Microsoft.Web.WebView2** — Microsoft WebView2 SDK license. https://www.nuget.org/packages/Microsoft.Web.WebView2
 - **xterm.js** and **@xterm/addon-fit** — MIT. Exact license texts are bundled in `src/Vibedev/Terminal/vendor/xterm.LICENSE` and `addon-fit.LICENSE` and copied into published applications.
 - **xUnit.net** — Apache-2.0. Test-only dependency. https://github.com/xunit/xunit

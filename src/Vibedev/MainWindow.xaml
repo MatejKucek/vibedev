@@ -15,7 +15,7 @@
             </StackPanel></Border>
             <Grid x:Name="ProjectsSidebar" Grid.Column="1" Background="#202024"><Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/><RowDefinition Height="Auto"/></Grid.RowDefinitions>
                 <DockPanel Margin="16,14,8,12"><Button Content="×" Padding="6,2" Margin="6,0,0,0" Background="Transparent" BorderThickness="0" DockPanel.Dock="Right" ToolTip="Hide Projects (Ctrl+B)" Click="ToggleProjects_Click"/><TextBlock x:Name="ProjectCount" Text="0" DockPanel.Dock="Right" VerticalAlignment="Center" Foreground="#A78BFA"/><TextBlock Text="PROJECTS" FontSize="10" FontWeight="Bold" Foreground="#9898A6" VerticalAlignment="Center"/></DockPanel>
-                <TextBox Grid.Row="1" x:Name="ProjectFilter" Margin="10,0,10,10" ToolTip="Filter projects by name or path" TextChanged="ProjectFilter_Changed"/>
+                <TextBox Grid.Row="1" x:Name="ProjectFilter" Margin="10,0,10,10" Tag="Filter projects…" AutomationProperties.Name="Filter projects" ToolTip="Filter projects by name or path" TextChanged="ProjectFilter_Changed"/>
                 <ListBox Grid.Row="2" x:Name="ProjectList" Margin="6,0" SelectionChanged="ProjectList_Changed"/>
                 <StackPanel Grid.Row="3" Margin="12,14"><Button Content="⌕ Scan a directory" Click="Scan_Click" ToolTip="Find repositories recursively" Margin="0,0,0,8"/><TextBlock x:Name="ScanRootLabel" Text="Find repositories in subfolders" FontSize="10" Foreground="#777784" TextWrapping="Wrap"/></StackPanel>
             </Grid><GridSplitter x:Name="ProjectsSplitter" Grid.Column="2" Width="4" HorizontalAlignment="Stretch" ToolTip="Resize Projects sidebar"/>

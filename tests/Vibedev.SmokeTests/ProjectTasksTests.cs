@@ -16,8 +16,8 @@ internal static partial class Program
         var view = (ProjectView)window.Documents().Single().Content;
         window.UpdateLayout();
         Check(view.TaskCount.Text == "0 tasks", "A project without tasks/open shows 0 tasks");
-        var navigation = Descendants<TabControl>(view).Single(t => t.Items.OfType<TabItem>().Any(i => i.Header as string == "TASKS"));
-        var tasksTab = navigation.Items.OfType<TabItem>().Single(t => t.Header as string == "TASKS");
+        var navigation = Descendants<TabControl>(view).Single(t => t.Items.OfType<TabItem>().Any(i => i.Content is ProjectTasksView));
+        var tasksTab = navigation.Items.OfType<TabItem>().Single(t => t.Content is ProjectTasksView);
         navigation.SelectedItem = tasksTab; window.UpdateLayout();
         var list = Descendants<ListBox>((DependencyObject)tasksTab.Content).Single();
         Check(list.Items.Count == 0 && Descendants<TextBlock>((DependencyObject)tasksTab.Content).Any(t => t.Text == "No open tasks in tasks/open." && t.IsVisible),

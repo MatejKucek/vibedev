@@ -9,7 +9,7 @@ namespace Vibedev.Views;
 public sealed class ProjectSearchView : UserControl
 {
     private readonly ProjectView project;
-    private readonly TextBox query = new() { ToolTip = "Search only this project", Margin = new(0, 0, 0, 8) };
+    private readonly TextBox query = new() { ToolTip = "Search only this project", Tag = "Search files and contents…", Margin = new(0, 0, 0, 8) };
     private readonly ComboBox mode = new() { ItemsSource = new[] { "Files & contents", "Contents", "Filenames" }, SelectedIndex = 0, Margin = new(0, 0, 0, 10), ToolTip = "Choose whether to search filenames, file contents, or both" };
     private readonly TextBlock summary = Ui.Text("Search this project", 11, "#9898A6");
     private readonly ListBox results = new() { HorizontalContentAlignment = HorizontalAlignment.Stretch };

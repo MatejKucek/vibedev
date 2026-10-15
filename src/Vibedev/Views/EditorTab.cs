@@ -8,6 +8,7 @@ using ICSharpCode.AvalonEdit;
 using ICSharpCode.AvalonEdit.Highlighting;
 using ICSharpCode.AvalonEdit.Indentation.CSharp;
 using Vibedev.Core;
+using Vibedev.Services;
 
 namespace Vibedev.Views;
 
@@ -16,8 +17,8 @@ public sealed class EditorTab : TabItem, IDisposable
     private TextFile file;
     private readonly TextEditor editor;
     private readonly TextBlock title;
-    private readonly TextBox find = new() { Width = 150, ToolTip = "Find text" };
-    private readonly TextBox replace = new() { Width = 150, ToolTip = "Replacement" };
+    private readonly TextBox find = new() { Width = 150, ToolTip = "Find text", Tag = "Find…" };
+    private readonly TextBox replace = new() { Width = 150, ToolTip = "Replacement", Tag = "Replace with…" };
     private readonly Border search;
     private readonly TextBlock searchStatus = Ui.Text("", 11, "#9898A6");
     private readonly TextBlock location = Ui.Text("", 10, "#777784");
@@ -26,14 +27,18 @@ public sealed class EditorTab : TabItem, IDisposable
     private string saveStatus = "Autosave on";
     private readonly DispatcherTimer autosave = new() { Interval = TimeSpan.FromMilliseconds(800) };
     private readonly SemaphoreSlim saveLock = new(1, 1);
-    private bool saving, disposed;
+    private bool saving, disposed, autosavePaused;
+    private readonly MarkdownPreview? markdown;
+    private readonly Button? previewButton, editButton;
     public event Action? Saved;
     private static readonly HashSet<string> DarkDefinitions = [];
     public string FilePath => file.Path;
     public bool IsDirty => editor.Text != file.Text;
     public TextEditor Editor => editor;
+    internal MarkdownPreview? Markdown => markdown;
+    internal bool IsPreviewVisible => markdown?.Visibility == Visibility.Visible;
 
-    public EditorTab(TextFile file, Action<EditorTab> close, Action changed)
+    public EditorTab(TextFile file, Action<EditorTab> close, Action changed, string? projectRoot = null, Func<string, Task>? openFile = null)
     {
         Style = (Style)Application.Current.FindResource(typeof(TabItem));
         this.file = file; this.changed = changed;
@@ -56,10 +61,12 @@ public sealed class EditorTab : TabItem, IDisposable
         editor.TextChanged += (_, _) =>
         {
             title.Text = Path.GetFileName(file.Path) + (IsDirty ? " ●" : ""); changed();
-            autosave.Stop(); if (!disposed && IsDirty) autosave.Start();
+            autosave.Stop(); if (!disposed && !autosavePaused && IsDirty) autosave.Start();
+            markdown?.Update(editor.Text);
         };
         editor.TextArea.Caret.PositionChanged += (_, _) => UpdateLocation();
-        editor.PreviewKeyDown += async (_, e) =>
+        var layout = new Grid(); layout.RowDefinitions.Add(new() { Height = GridLength.Auto }); layout.RowDefinitions.Add(new() { Height = GridLength.Auto }); layout.RowDefinitions.Add(new()); layout.RowDefinitions.Add(new() { Height = GridLength.Auto });
+        layout.PreviewKeyDown += async (_, e) =>
         {
             if (Keyboard.Modifiers != ModifierKeys.Control) return;
             switch (e.Key)
@@ -69,19 +76,47 @@ public sealed class EditorTab : TabItem, IDisposable
                 case Key.W: e.Handled = true; close(this); break;
             }
         };
-        var layout = new Grid(); layout.RowDefinitions.Add(new() { Height = GridLength.Auto }); layout.RowDefinitions.Add(new()); layout.RowDefinitions.Add(new() { Height = GridLength.Auto });
+        var editing = new Grid(); editing.Children.Add(editor);
+        if (MarkdownPreviewRenderer.Supports(file.Path))
+        {
+            editor.WordWrap = true;
+            markdown = new MarkdownPreview(file.Path, projectRoot ?? Path.GetDirectoryName(file.Path)!, openFile);
+            editing.Children.Add(markdown);
+            var modes = new DockPanel { Margin = new(10, 6, 6, 6) };
+            previewButton = Ui.Button("Preview", () => ShowMarkdownPreview(true));
+            editButton = Ui.Button("Edit", () => ShowMarkdownPreview(false));
+            previewButton.Padding = editButton.Padding = new(10, 4, 10, 4);
+            previewButton.ToolTip = "Read the rendered Markdown, including unsaved edits";
+            editButton.ToolTip = "Edit Markdown source";
+            var buttons = Ui.Row(previewButton, editButton); DockPanel.SetDock(buttons, Dock.Right); modes.Children.Add(buttons);
+            var label = Ui.Text("MARKDOWN", 10, "#9898A6"); label.VerticalAlignment = VerticalAlignment.Center; modes.Children.Add(label);
+            layout.Children.Add(modes);
+            ShowMarkdownPreview(true);
+        }
         var tools = new WrapPanel { Margin = new(6) };
         tools.Children.Add(find); tools.Children.Add(Ui.Button("Next", FindNext)); tools.Children.Add(replace);
         tools.Children.Add(Ui.Button("Replace", ReplaceOne)); tools.Children.Add(Ui.Button("All", ReplaceAll)); tools.Children.Add(Ui.Button("×", () => { search!.Visibility = Visibility.Collapsed; editor.Focus(); })); tools.Children.Add(searchStatus);
         search = new Border { Child = tools, Background = Ui.Brush("#24242A"), Visibility = Visibility.Collapsed };
         find.KeyDown += (_, e) => { if (e.Key == Key.Enter) { FindNext(); e.Handled = true; } if (e.Key == Key.Escape) search.Visibility = Visibility.Collapsed; };
-        layout.Children.Add(search); Grid.SetRow(editor, 1); layout.Children.Add(editor);
-        var footer = new Border { Background = Ui.Brush("#202024"), Padding = new(12, 5, 12, 5), Child = location }; Grid.SetRow(footer, 2); layout.Children.Add(footer);
+        Grid.SetRow(search, 1); layout.Children.Add(search); Grid.SetRow(editing, 2); layout.Children.Add(editing);
+        var footer = new Border { Background = Ui.Brush("#202024"), Padding = new(12, 5, 12, 5), Child = location }; Grid.SetRow(footer, 3); layout.Children.Add(footer);
         Content = layout; UpdateLocation();
     }
     private void UpdateLocation() => location.Text = $"Ln {editor.TextArea.Caret.Line}, Col {editor.TextArea.Caret.Column}     {file.Encoding.WebName.ToUpperInvariant()}     {Path.GetExtension(file.Path).TrimStart('.').ToUpperInvariant()}     {saveStatus}     {languageStatus}";
     internal void SetLanguageStatus(string text) { languageStatus = text; UpdateLocation(); }
-    public void ShowSearch() { search.Visibility = Visibility.Visible; if (editor.SelectedText.Length > 0) find.Text = editor.SelectedText; find.Focus(); find.SelectAll(); }
+    public void ShowSearch() { ShowMarkdownPreview(false); search.Visibility = Visibility.Visible; if (editor.SelectedText.Length > 0) find.Text = editor.SelectedText; find.Focus(); find.SelectAll(); }
+    internal void ShowMarkdownPreview(bool preview)
+    {
+        if (markdown is null) return;
+        markdown.Visibility = preview ? Visibility.Visible : Visibility.Collapsed;
+        editor.Visibility = preview ? Visibility.Collapsed : Visibility.Visible;
+        previewButton!.Background = Ui.Brush(preview ? "#343044" : "#2A2A30");
+        previewButton.BorderBrush = Ui.Brush(preview ? "#A78BFA" : "#3C3C44");
+        editButton!.Background = Ui.Brush(preview ? "#2A2A30" : "#343044");
+        editButton.BorderBrush = Ui.Brush(preview ? "#3C3C44" : "#A78BFA");
+        if (preview) { if (search is not null) search.Visibility = Visibility.Collapsed; markdown.Update(editor.Text); }
+        else editor.Focus();
+    }
     private void FindNext()
     {
         if (find.Text.Length == 0) return;
@@ -111,7 +146,8 @@ public sealed class EditorTab : TabItem, IDisposable
         try
         {
             if (disposed) return !IsDirty;
-            if (!IsDirty) return true;
+            if (automatic && autosavePaused) return !IsDirty;
+            if (!IsDirty) { if (!automatic) ResumeAutosave("Autosave on"); return true; }
             var snapshot = editor.Text;
             saving = true;
             try
@@ -119,18 +155,19 @@ public sealed class EditorTab : TabItem, IDisposable
                 try { await file.SaveAsync(snapshot); }
                 catch (IOException ex) when (!automatic && ex.Message.StartsWith("The file changed on disk", StringComparison.Ordinal))
                 {
+                    PauseAutosave(ex);
                     if (MessageBox.Show(Window.GetWindow(this), ex.Message + "\n\nOverwrite the disk version?", "File changed", MessageBoxButton.YesNo, MessageBoxImage.Warning) != MessageBoxResult.Yes) return false;
                     await file.SaveAsync(snapshot, true);
                 }
             }
             catch (Exception ex)
             {
-                autosave.Stop(); saveStatus = "Autosave paused · Ctrl+S to resolve"; location.ToolTip = ex.Message; location.Foreground = Ui.Brush("#FBBF24"); UpdateLocation();
+                PauseAutosave(ex);
                 if (!automatic) Ui.Error(ex.Message, Window.GetWindow(this));
                 return false;
             }
             finally { saving = false; }
-            saveStatus = automatic ? "Autosaved" : "Saved"; location.ToolTip = null; location.Foreground = Ui.Brush("#777784"); UpdateLocation();
+            ResumeAutosave(automatic ? "Autosaved" : "Saved");
             title.Text = Path.GetFileName(file.Path) + (IsDirty ? " ●" : ""); changed(); Saved?.Invoke();
             if (!disposed && IsDirty) { autosave.Stop(); autosave.Start(); }
             return true;
@@ -143,18 +180,28 @@ public sealed class EditorTab : TabItem, IDisposable
         await saveLock.WaitAsync(); saveLock.Release();
         if (!IsDirty) return true;
         var answer = MessageBox.Show(Window.GetWindow(this), $"Save changes to {Path.GetFileName(file.Path)}?", "Unsaved changes", MessageBoxButton.YesNoCancel, MessageBoxImage.Question);
-        if (answer == MessageBoxResult.Cancel && !disposed) autosave.Start();
+        if (answer == MessageBoxResult.Cancel && !disposed && !autosavePaused) autosave.Start();
         return answer == MessageBoxResult.No || (answer == MessageBoxResult.Yes && await SaveAsync());
     }
-    public void Dispose() { disposed = true; autosave.Stop(); }
+    public void Dispose() { if (disposed) return; disposed = true; autosave.Stop(); markdown?.Dispose(); }
+    private void PauseAutosave(Exception error)
+    {
+        autosavePaused = true; autosave.Stop(); saveStatus = "Autosave paused · Ctrl+S to resolve";
+        location.ToolTip = error.Message; location.Foreground = Ui.Brush("#FBBF24"); UpdateLocation();
+    }
+    private void ResumeAutosave(string status)
+    {
+        autosavePaused = false; saveStatus = status; location.ToolTip = null;
+        location.Foreground = Ui.Brush("#9898A6"); UpdateLocation();
+    }
     public async Task RefreshFromDiskAsync()
     {
-        if (saving || IsDirty || !File.Exists(FilePath)) return;
+        if (disposed || saving || IsDirty || !File.Exists(FilePath)) return;
         var originalText = editor.Text;
         var updated = await TextFile.OpenAsync(FilePath);
-        if (saving || IsDirty || editor.Text != originalText) return;
+        if (disposed || saving || IsDirty || editor.Text != originalText) return;
         file = updated;
-        saveStatus = "Autosave on"; location.ToolTip = null; location.Foreground = Ui.Brush("#777784"); UpdateLocation();
+        ResumeAutosave("Autosave on");
         if (editor.Text != updated.Text)
         {
             var offset = editor.CaretOffset;
@@ -166,6 +213,7 @@ public sealed class EditorTab : TabItem, IDisposable
     }
     private static IHighlightingDefinition? Highlight(string path)
     {
+        if (MarkdownPreviewRenderer.Supports(path)) return MarkdownHighlighting.Definition;
         var extension = Path.GetExtension(path).ToLowerInvariant();
         var definition = HighlightingManager.Instance.GetDefinitionByExtension(extension)
             ?? HighlightingManager.Instance.GetDefinition(extension is ".json" or ".jsonc" ? "JavaScript" : extension is ".csproj" or ".props" or ".targets" or ".xaml" ? "XML" : "C#");

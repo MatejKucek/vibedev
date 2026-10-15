@@ -25,6 +25,7 @@
   <ItemGroup>
     <Resource Include="Assets\app-icon.ico" />
     <Content Include="Terminal\**\*" CopyToOutputDirectory="PreserveNewest" />
+    <Content Include="Markdown\**\*" CopyToOutputDirectory="PreserveNewest" />
     <None Include="..\..\LICENSE;..\..\README.md;..\..\THIRD-PARTY-NOTICES.md" Link="%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
     <InternalsVisibleTo Include="Vibedev.SmokeTests" />
   </ItemGroup>

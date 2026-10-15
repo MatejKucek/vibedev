@@ -21,9 +21,9 @@ public sealed class ProjectView : UserControl, IDisposable
     private readonly ProjectFileMonitor? monitor;
     private bool disposed;
     private readonly Dictionary<string, string> refreshWarnings = new(StringComparer.OrdinalIgnoreCase);
-    private readonly ComboBox launches = new() { MinWidth = 160, MaxWidth = 260, Margin = new(0, 0, 6, 0), DisplayMemberPath = "Name", ToolTip = ".vscode/launch.json" };
+    private readonly ComboBox launches = new() { MinWidth = 60, MaxWidth = 360, HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new(0, 0, 6, 0), DisplayMemberPath = "Name", ToolTip = ".vscode/launch.json", Tag = "No launch configurations" };
     private readonly Button run;
-    private readonly TextBlock placeholder = Ui.Text("Open a file from the explorer\n\nCtrl+S  Save    ·    Ctrl+F  Find    ·    Ctrl+H  Replace", 13, "#777784");
+    private readonly TextBlock placeholder = Ui.Text("Open a file to start editing\n\nCtrl+P   Find a file\nCtrl+Shift+F   Search this project", 13, "#9898A6");
     public ProjectState Project { get; }
     public IEnumerable<EditorTab> Editors => tabs.Items.OfType<EditorTab>();
     public Action<Orientation>? SplitRequested { get; set; }
@@ -50,37 +50,49 @@ public sealed class ProjectView : UserControl, IDisposable
         gitView = new(main, this);
         tasksView = new(project.Entry.Path, OpenFileAsync, RefreshTasks);
         tabs.Style = (Style)Application.Current.FindResource(typeof(TabControl));
-        var root = new Grid(); root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new());
-        var header = new Grid(); header.ColumnDefinitions.Add(new() { Width = new(1, GridUnitType.Star), MinWidth = 180, MaxWidth = 360 }); header.ColumnDefinitions.Add(new() { Width = GridLength.Auto }); header.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        var root = new Grid(); root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new());
+        var header = new Grid(); header.ColumnDefinitions.Add(new()); header.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         var identity = new Grid { VerticalAlignment = VerticalAlignment.Center, Margin = new(0, 0, 12, 0) };
         identity.ColumnDefinitions.Add(new() { Width = GridLength.Auto, MaxWidth = 160 }); identity.ColumnDefinitions.Add(new() { Width = GridLength.Auto }); identity.ColumnDefinitions.Add(new());
-        ProjectTitle = Ui.Text(project.Entry.Name, 16);
+        ProjectTitle = Ui.Text(project.Entry.Name, 14);
         ProjectTitle.FontWeight = FontWeights.SemiBold; ProjectTitle.TextWrapping = TextWrapping.NoWrap; ProjectTitle.TextTrimming = TextTrimming.CharacterEllipsis;
         ProjectTitle.Margin = new(0, 0, 10, 0); ProjectTitle.VerticalAlignment = VerticalAlignment.Center; ProjectTitle.ToolTip = project.Entry.Path + "\nDrag the name to move or dock this panel\nF: toggle focus mode (outside text inputs)\nRight-click for Git, float/dock, close and panel layout actions";
         ProjectDragHandle.Attach(ProjectTitle, point => DragRequested?.Invoke(point));
         identity.Children.Add(ProjectTitle);
         TaskCount.Margin = new(0, 0, 10, 0); TaskCount.VerticalAlignment = VerticalAlignment.Center; TaskCount.TextWrapping = TextWrapping.NoWrap; TaskCount.ToolTip = Path.Combine(project.Entry.Path, "tasks", "open"); Grid.SetColumn(TaskCount, 1); identity.Children.Add(TaskCount);
-        var projectPath = Ui.Text(project.Entry.Path, 11, "#B0A5C3"); projectPath.TextWrapping = TextWrapping.NoWrap; projectPath.TextTrimming = TextTrimming.CharacterEllipsis; projectPath.VerticalAlignment = VerticalAlignment.Center; projectPath.ToolTip = project.Entry.Path; Grid.SetColumn(projectPath, 2); identity.Children.Add(projectPath);
+        var projectPath = Ui.Text(project.Entry.Path, 11, "#9898A6"); projectPath.TextWrapping = TextWrapping.NoWrap; projectPath.TextTrimming = TextTrimming.CharacterEllipsis; projectPath.VerticalAlignment = VerticalAlignment.Center; projectPath.ToolTip = project.Entry.Path; Grid.SetColumn(projectPath, 2); identity.Children.Add(projectPath);
         header.Children.Add(identity);
-        CloseProjectButton = Ui.Button("×", () => CloseRequested?.Invoke()); CloseProjectButton.Padding = new(8, 4, 8, 4); CloseProjectButton.Margin = new(0); CloseProjectButton.VerticalAlignment = VerticalAlignment.Center; CloseProjectButton.ToolTip = "Close project panel"; Grid.SetColumn(CloseProjectButton, 2); header.Children.Add(CloseProjectButton);
-        var headerScroll = new ScrollViewer { Content = header, HorizontalScrollBarVisibility = ScrollBarVisibility.Auto, VerticalScrollBarVisibility = ScrollBarVisibility.Disabled };
-        root.Children.Add(new Border { Background = Ui.Brush("#30283F"), BorderBrush = Ui.Brush("#6E568F"), BorderThickness = new(0, 0, 0, 1), CornerRadius = new(5, 5, 0, 0), Padding = new(14, 6, 10, 6), Child = headerScroll });
-        var tools = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center, Margin = new(0, 0, 6, 0) }; Grid.SetColumn(tools, 1);
-        tools.Children.Add(launches); run = Ui.Button("▶ Run", () => main.RunProject(this), true); tools.Children.Add(run);
+        CloseProjectButton = Ui.Button("×", () => CloseRequested?.Invoke()); CloseProjectButton.Padding = new(8, 2, 8, 2); CloseProjectButton.Margin = new(0); CloseProjectButton.Background = System.Windows.Media.Brushes.Transparent; CloseProjectButton.BorderThickness = new(0); CloseProjectButton.VerticalAlignment = VerticalAlignment.Center; CloseProjectButton.ToolTip = "Close project panel"; Grid.SetColumn(CloseProjectButton, 1); header.Children.Add(CloseProjectButton);
+        root.Children.Add(new Border { Background = Ui.Brush("#282431"), BorderBrush = Ui.Brush("#40364F"), BorderThickness = new(0, 0, 0, 1), CornerRadius = new(5, 5, 0, 0), Padding = new(12, 7, 8, 7), Child = header });
+        var tools = new Grid { Margin = new(10, 7, 8, 7) };
+        tools.ColumnDefinitions.Add(new() { MaxWidth = 360 }); tools.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
+        tools.Children.Add(launches);
+        var actions = new StackPanel { Orientation = Orientation.Horizontal }; Grid.SetColumn(actions, 1); tools.Children.Add(actions);
+        run = Ui.Button("▶ Run", () => main.RunProject(this), true); actions.Children.Add(run);
         var reloadLaunches = Ui.Button("↻", LoadLaunches); reloadLaunches.ToolTip = "Reload .vscode/launch.json";
-        tools.Children.Add(reloadLaunches);
-        tools.Children.Add(Ui.Button("Split →", () => SplitRequested?.Invoke(Orientation.Horizontal))); tools.Children.Add(Ui.Button("Split ↓", () => SplitRequested?.Invoke(Orientation.Vertical))); tools.Children.Add(Ui.Button("↗ Float", () => FloatRequested?.Invoke()));
-        header.Children.Add(tools);
-        var csharp = Ui.Button("C# server", async () => { try { await language.EnableAsync(); } catch (Exception ex) { main.Log("C# server: " + ex.Message); } });
-        csharp.ToolTip = "Install the C# language server, or restart it after a failure"; tools.Children.Add(csharp);
-        var work = new Grid(); work.ColumnDefinitions.Add(new() { Width = new(240), MinWidth = 130 }); work.ColumnDefinitions.Add(new() { Width = new(4) }); work.ColumnDefinitions.Add(new() { MinWidth = 120 });
+        actions.Children.Add(reloadLaunches);
+        var panelMenu = new ContextMenu { Style = (Style)main.FindResource("ProjectContextMenu") };
+        foreach (var (label, action) in new (string, Action)[] {
+            ("Split →", () => SplitRequested?.Invoke(Orientation.Horizontal)), ("Split ↓", () => SplitRequested?.Invoke(Orientation.Vertical)),
+            ("↗ Float", () => FloatRequested?.Invoke()), ("C# server", async () => { try { await language.EnableAsync(); } catch (Exception ex) { main.Log("C# server: " + ex.Message); } }) })
+        {
+            var item = new MenuItem { Header = label, Style = (Style)main.FindResource("ProjectMenuItem") };
+            item.Click += (_, _) => action(); panelMenu.Items.Add(item);
+        }
+        var more = Ui.Button("⋯", () => panelMenu.IsOpen = true); more.ToolTip = "Panel actions: split, float and C# server"; more.ContextMenu = panelMenu;
+        panelMenu.PlacementTarget = more; panelMenu.Placement = System.Windows.Controls.Primitives.PlacementMode.Bottom;
+        more.Margin = new(0); actions.Children.Add(more);
+        foreach (Button button in actions.Children) button.Padding = new(9, 5, 9, 5);
+        Grid.SetRow(tools, 1); root.Children.Add(tools);
+        var work = new Grid(); work.ColumnDefinitions.Add(new() { Width = new(200), MinWidth = 130 }); work.ColumnDefinitions.Add(new() { Width = new(4) }); work.ColumnDefinitions.Add(new() { MinWidth = 120 });
         var explorer = new DockPanel { Background = Ui.Brush("#1D1D21") };
         var fileHeader = new DockPanel { Margin = new(10, 8, 4, 8) }; var refresh = Ui.Button("↻", RefreshTree); refresh.Padding = new(6, 2, 6, 2); refresh.ToolTip = "Refresh files, preserving expanded folders"; DockPanel.SetDock(refresh, Dock.Right); fileHeader.Children.Add(refresh); fileHeader.Children.Add(Ui.Text("FILES", 10, "#9898A6")); DockPanel.SetDock(fileHeader, Dock.Top); explorer.Children.Add(fileHeader); explorer.Children.Add(tree);
         navigation.Style = (Style)Application.Current.FindResource(typeof(TabControl));
-        navigation.Items.Add(new TabItem { Header = "EXPLORER", Content = explorer, ToolTip = "Browse project files", Style = (Style)Application.Current.FindResource(typeof(TabItem)), Padding = new Thickness(10, 8, 10, 8) });
-        navigation.Items.Add(new TabItem { Header = "SEARCH", Content = search, ToolTip = "Search files and contents (Ctrl+Shift+F), or filenames (Ctrl+P)", Style = (Style)Application.Current.FindResource(typeof(TabItem)), Padding = new Thickness(10, 8, 10, 8) });
-        navigation.Items.Add(new TabItem { Header = "GIT", Content = gitView, ToolTip = "Review diffs, stage files and commit changes", Style = (Style)Application.Current.FindResource(typeof(TabItem)), Padding = new Thickness(10, 8, 10, 8) });
-        navigation.Items.Add(new TabItem { Header = "TASKS", Content = tasksView, ToolTip = "Open task files in tasks/open", Style = (Style)Application.Current.FindResource(typeof(TabItem)), Padding = new Thickness(10, 8, 10, 8) });
+        navigation.Items.Add(new TabItem { Header = "Explorer", Content = explorer, ToolTip = "Browse project files", Style = (Style)Application.Current.FindResource(typeof(TabItem)), Padding = new Thickness(8, 8, 8, 8) });
+        navigation.Items.Add(new TabItem { Header = "Search", Content = search, ToolTip = "Search files and contents (Ctrl+Shift+F), or filenames (Ctrl+P)", Style = (Style)Application.Current.FindResource(typeof(TabItem)), Padding = new Thickness(8, 8, 8, 8) });
+        navigation.Items.Add(new TabItem { Header = "Git", Content = gitView, ToolTip = "Review diffs, stage files and commit changes", Style = (Style)Application.Current.FindResource(typeof(TabItem)), Padding = new Thickness(8, 8, 8, 8) });
+        navigation.Items.Add(new TabItem { Header = "Tasks", Content = tasksView, ToolTip = "Open task files in tasks/open", Style = (Style)Application.Current.FindResource(typeof(TabItem)), Padding = new Thickness(8, 8, 8, 8) });
+        navigation.FontSize = 12;
         navigation.SelectionChanged += async (_, e) =>
         {
             if (!ReferenceEquals(e.Source, navigation)) return;
@@ -89,8 +101,8 @@ public sealed class ProjectView : UserControl, IDisposable
         };
         navigation.SelectedIndex = 0; work.Children.Add(navigation);
         var splitter = new GridSplitter { Width = 4, HorizontalAlignment = HorizontalAlignment.Stretch }; Grid.SetColumn(splitter, 1); work.Children.Add(splitter);
-        var editing = new Grid(); editing.Children.Add(tabs); placeholder.TextAlignment = TextAlignment.Center; placeholder.HorizontalAlignment = HorizontalAlignment.Center; placeholder.VerticalAlignment = VerticalAlignment.Center; editing.Children.Add(placeholder); Grid.SetColumn(editing, 2); work.Children.Add(editing);
-        Grid.SetRow(work, 1); root.Children.Add(work);
+        var editing = new Grid(); editing.Children.Add(tabs); placeholder.Margin = new(16); placeholder.TextAlignment = TextAlignment.Center; placeholder.HorizontalAlignment = HorizontalAlignment.Center; placeholder.VerticalAlignment = VerticalAlignment.Center; editing.Children.Add(placeholder); Grid.SetColumn(editing, 2); work.Children.Add(editing);
+        Grid.SetRow(work, 2); root.Children.Add(work);
         ProjectFrame = new Border { BorderBrush = Ui.Brush("#6E568F"), BorderThickness = new(1), CornerRadius = new(6), Margin = new(4), Background = Ui.Brush("#18181B"), Child = root };
         Content = ProjectFrame;
         launches.SelectionChanged += (_, _) => RefreshState();
@@ -115,6 +127,7 @@ public sealed class ProjectView : UserControl, IDisposable
     {
         try { var name = SelectedLaunch?.Name; launches.ItemsSource = LaunchService.Read(Project.Entry.Path); launches.SelectedItem = launches.Items.OfType<LaunchConfiguration>().FirstOrDefault(c => c.Name == name) ?? launches.Items.OfType<LaunchConfiguration>().FirstOrDefault(); }
         catch (Exception ex) { launches.ItemsSource = null; main.Log($"[{Project.Entry.Name}] launch.json: {ex.Message}"); }
+        launches.IsEnabled = launches.Items.Count > 0;
         launches.ToolTip = launches.Items.Count == 0 ? "No configurations. Add .vscode/launch.json, then refresh." : ".vscode/launch.json"; RefreshState();
     }
     public void RefreshState()
@@ -137,6 +150,7 @@ public sealed class ProjectView : UserControl, IDisposable
         await OpenFileAsync(hit.FilePath);
         var tab = Editors.FirstOrDefault(e => e.FilePath.Equals(hit.FilePath, StringComparison.OrdinalIgnoreCase));
         if (tab is null) return;
+        tab.ShowMarkdownPreview(false);
         if (hit.Line > 0 && hit.Line <= tab.Editor.Document.LineCount)
         {
             var line = tab.Editor.Document.GetLineByNumber(hit.Line);
@@ -156,7 +170,7 @@ public sealed class ProjectView : UserControl, IDisposable
             existing = Editors.FirstOrDefault(e => e.FilePath.Equals(file.Path, StringComparison.OrdinalIgnoreCase));
             if (existing is not null) { tabs.SelectedItem = existing; return; }
             if (disposed) return;
-            var tab = new EditorTab(file, async t => { if (await t.CanCloseAsync()) { t.Dispose(); language.Detach(t); tabs.Items.Remove(t); placeholder.Visibility = tabs.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed; main.OnEditorChanged(this); } }, () => main.OnEditorChanged(this));
+            var tab = new EditorTab(file, async t => { if (await t.CanCloseAsync()) { t.Dispose(); language.Detach(t); tabs.Items.Remove(t); placeholder.Visibility = tabs.Items.Count == 0 ? Visibility.Visible : Visibility.Collapsed; main.OnEditorChanged(this); } }, () => main.OnEditorChanged(this), Project.Entry.Path, OpenFileAsync);
             tabs.Items.Add(tab); tabs.SelectedItem = tab; placeholder.Visibility = Visibility.Collapsed;
             tree.Reveal(path);
             await language.AttachAsync(tab);

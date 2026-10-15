@@ -4,6 +4,9 @@ namespace Vibedev.Core;
 
 public sealed class TextFile
 {
+    // Panels can own different snapshots of the same path. Keep the conflict check and
+    // replacement in one process-wide critical section, with a bounded set of locks.
+    private static readonly SemaphoreSlim[] SaveLocks = Enumerable.Range(0, 64).Select(_ => new SemaphoreSlim(1, 1)).ToArray();
     public string Path { get; }
     public string Text { get; private set; }
     public Encoding Encoding { get; }
@@ -32,19 +35,31 @@ public sealed class TextFile
 
     public async Task SaveAsync(string text, bool overwriteExternalChanges = false)
     {
-        if (!overwriteExternalChanges && (!File.Exists(Path) || !(await File.ReadAllBytesAsync(Path)).AsSpan().SequenceEqual(original)))
-            throw new IOException("The file changed on disk. Reopen it or explicitly choose to overwrite the disk version.");
-        var bytes = Encoding.GetPreamble().Concat(Encoding.GetBytes(text)).ToArray();
-        // A sibling temporary file makes replacement atomic while preserving the old file until success.
-        var temp = Path + ".vibedev-" + Guid.NewGuid().ToString("N") + ".tmp";
+        var gate = SaveLocks[(uint)StringComparer.OrdinalIgnoreCase.GetHashCode(Path) % (uint)SaveLocks.Length];
+        await gate.WaitAsync();
         try
         {
-            await File.WriteAllBytesAsync(temp, bytes);
-            if (File.Exists(Path)) File.Replace(temp, Path, null);
-            else File.Move(temp, Path);
+            await CheckForExternalChangesAsync(overwriteExternalChanges);
+            var bytes = Encoding.GetPreamble().Concat(Encoding.GetBytes(text)).ToArray();
+            // A sibling temporary file keeps the old file intact until replacement succeeds.
+            var temp = Path + ".vibedev-" + Guid.NewGuid().ToString("N") + ".tmp";
+            try
+            {
+                await File.WriteAllBytesAsync(temp, bytes);
+                await CheckForExternalChangesAsync(overwriteExternalChanges);
+                if (File.Exists(Path)) File.Replace(temp, Path, null);
+                else File.Move(temp, Path);
+            }
+            finally { if (File.Exists(temp)) File.Delete(temp); }
+            original = bytes;
+            Text = text;
         }
-        finally { if (File.Exists(temp)) File.Delete(temp); }
-        original = bytes;
-        Text = text;
+        finally { gate.Release(); }
+    }
+
+    private async Task CheckForExternalChangesAsync(bool overwrite)
+    {
+        if (!overwrite && (!File.Exists(Path) || !(await File.ReadAllBytesAsync(Path)).AsSpan().SequenceEqual(original)))
+            throw new IOException("The file changed on disk. Reopen it or explicitly choose to overwrite the disk version.");
     }
 }

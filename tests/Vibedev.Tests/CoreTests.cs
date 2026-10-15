@@ -48,6 +48,34 @@ public sealed class WorkspaceTests
 
 public sealed class TextFileTests
 {
+    [Fact]
+    public async Task ConcurrentPanelsCannotSilentlyOverwriteEachOther()
+    {
+        using var temp = new TempDirectory();
+        var original = new string('a', 1024 * 1024);
+        var path = temp.File("shared.txt", original);
+        var first = await TextFile.OpenAsync(path);
+        var second = await TextFile.OpenAsync(path);
+        using var start = new Barrier(2);
+        async Task<bool> TrySave(TextFile file, string text)
+        {
+            start.SignalAndWait(TimeSpan.FromSeconds(10));
+            try { await file.SaveAsync(text); return true; }
+            catch (IOException) { return false; }
+        }
+
+        var firstText = new string('b', 4 * 1024 * 1024);
+        var secondText = new string('c', 4 * 1024 * 1024);
+        var saved = await Task.WhenAll(Task.Run(() => TrySave(first, firstText)), Task.Run(() => TrySave(second, secondText)));
+
+        Assert.Single(saved, success => success);
+        Assert.Equal(saved[0] ? firstText : secondText, await System.IO.File.ReadAllTextAsync(path));
+        var loser = saved[0] ? second : first;
+        Assert.Equal(original, loser.Text);
+        await Assert.ThrowsAsync<IOException>(() => loser.SaveAsync("retry must still require resolution"));
+        Assert.Empty(Directory.GetFiles(temp.Path, "*.tmp"));
+    }
+
     [Theory]
     [InlineData("utf8")]
     [InlineData("utf8bom")]

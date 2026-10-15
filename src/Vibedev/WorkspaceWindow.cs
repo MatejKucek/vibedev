@@ -621,7 +621,8 @@ public partial class MainWindow : Window
         RunningProject = view.Project; Redraw();
         try
         {
-            if (!await view.SaveAllAsync()) return;
+            foreach (var panel in views.Values.Where(panel => panel.Project == view.Project).ToArray())
+                if (!await panel.SaveAllAsync()) return;
             var plan = LaunchService.Resolve(view.Project.Entry.Path, config);
             SetTerminalVisible(true); BottomTabs.SelectedIndex = 0;
             SetStatus($"Running {view.Project.Entry.Name} / {config.Name}");
