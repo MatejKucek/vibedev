@@ -16,6 +16,12 @@ public sealed class ProjectView : UserControl, IDisposable
     private readonly ProjectSearchView search;
     private readonly ProjectGitView gitView;
     private readonly ProjectTasksView tasksView;
+    private readonly TasksPanel tasksPanel;
+    private readonly ColumnDefinition tasksColumn = new() { Width = GridLength.Auto, MinWidth = 200 };
+    private readonly ColumnDefinition tasksSplitterColumn = new() { Width = new(4) };
+    private readonly GridSplitter tasksSplitter = new() { Width = 4 };
+    private GridLength tasksWidth = GridLength.Auto;
+    internal bool TasksVisible => tasksPanel.Visibility == Visibility.Visible;
     private readonly TabControl tabs = new();
     private readonly CSharpLanguageService language;
     private readonly ProjectFileMonitor? monitor;
@@ -49,7 +55,7 @@ public sealed class ProjectView : UserControl, IDisposable
         search = new(this);
         gitView = new(main, this);
         tasksView = new(project.Entry.Path, OpenFileAsync, RefreshTasks);
-        tabs.Style = (Style)Application.Current.FindResource(typeof(TabControl));
+        tasksPanel = new(project.Entry.Path, OpenFileAsync) { CloseRequested = () => SetTasksVisible(false) };        tabs.Style = (Style)Application.Current.FindResource(typeof(TabControl));
         var root = new Grid(); root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new());
         var header = new Grid(); header.ColumnDefinitions.Add(new()); header.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         var identity = new Grid { VerticalAlignment = VerticalAlignment.Center, Margin = new(0, 0, 12, 0) };
@@ -59,7 +65,7 @@ public sealed class ProjectView : UserControl, IDisposable
         ProjectTitle.Margin = new(0, 0, 10, 0); ProjectTitle.VerticalAlignment = VerticalAlignment.Center; ProjectTitle.ToolTip = project.Entry.Path + "\nDrag the name to move or dock this panel\nF: toggle focus mode (outside text inputs)\nRight-click for Git, float/dock, close and panel layout actions";
         ProjectDragHandle.Attach(ProjectTitle, point => DragRequested?.Invoke(point));
         identity.Children.Add(ProjectTitle);
-        TaskCount.Margin = new(0, 0, 10, 0); TaskCount.VerticalAlignment = VerticalAlignment.Center; TaskCount.TextWrapping = TextWrapping.NoWrap; TaskCount.ToolTip = Path.Combine(project.Entry.Path, "tasks", "open"); Grid.SetColumn(TaskCount, 1); identity.Children.Add(TaskCount);
+        TaskCount.Margin = new(0, 0, 10, 0); TaskCount.VerticalAlignment = VerticalAlignment.Center; TaskCount.TextWrapping = TextWrapping.NoWrap; TaskCount.ToolTip = "Click to hide tasks"; TaskCount.Cursor = Cursors.Hand; TaskCount.MouseLeftButtonUp += (_, e) => { e.Handled = true; SetTasksVisible(!TasksVisible); }; Grid.SetColumn(TaskCount, 1); identity.Children.Add(TaskCount);
         var projectPath = Ui.Text(project.Entry.Path, 11, "#9898A6"); projectPath.TextWrapping = TextWrapping.NoWrap; projectPath.TextTrimming = TextTrimming.CharacterEllipsis; projectPath.VerticalAlignment = VerticalAlignment.Center; projectPath.ToolTip = project.Entry.Path; Grid.SetColumn(projectPath, 2); identity.Children.Add(projectPath);
         header.Children.Add(identity);
         CloseProjectButton = Ui.Button("×", () => CloseRequested?.Invoke()); CloseProjectButton.Padding = new(8, 2, 8, 2); CloseProjectButton.Margin = new(0); CloseProjectButton.Background = System.Windows.Media.Brushes.Transparent; CloseProjectButton.BorderThickness = new(0); CloseProjectButton.VerticalAlignment = VerticalAlignment.Center; CloseProjectButton.ToolTip = "Close project panel"; Grid.SetColumn(CloseProjectButton, 1); header.Children.Add(CloseProjectButton);
@@ -84,7 +90,9 @@ public sealed class ProjectView : UserControl, IDisposable
         more.Margin = new(0); actions.Children.Add(more);
         foreach (Button button in actions.Children) button.Padding = new(9, 5, 9, 5);
         Grid.SetRow(tools, 1); root.Children.Add(tools);
-        var work = new Grid(); work.ColumnDefinitions.Add(new() { Width = new(200), MinWidth = 130 }); work.ColumnDefinitions.Add(new() { Width = new(4) }); work.ColumnDefinitions.Add(new() { MinWidth = 120 });
+        var work = new Grid(); work.ColumnDefinitions.Add(tasksColumn); work.ColumnDefinitions.Add(tasksSplitterColumn);
+        work.ColumnDefinitions.Add(new() { Width = new(200), MinWidth = 130 }); work.ColumnDefinitions.Add(new() { Width = new(4) }); work.ColumnDefinitions.Add(new() { MinWidth = 120 });
+        work.Children.Add(tasksPanel); tasksSplitter.HorizontalAlignment = HorizontalAlignment.Stretch; Grid.SetColumn(tasksSplitter, 1); work.Children.Add(tasksSplitter);
         var explorer = new DockPanel { Background = Ui.Brush("#1D1D21") };
         var fileHeader = new DockPanel { Margin = new(10, 8, 4, 8) }; var refresh = Ui.Button("↻", RefreshTree); refresh.Padding = new(6, 2, 6, 2); refresh.ToolTip = "Refresh files, preserving expanded folders"; DockPanel.SetDock(refresh, Dock.Right); fileHeader.Children.Add(refresh); fileHeader.Children.Add(Ui.Section("FILES")); DockPanel.SetDock(fileHeader, Dock.Top); explorer.Children.Add(fileHeader); explorer.Children.Add(tree);
         navigation.Style = (Style)Application.Current.FindResource(typeof(TabControl));
@@ -99,9 +107,9 @@ public sealed class ProjectView : UserControl, IDisposable
             if (navigation.SelectedIndex == 2) await gitView.RefreshAsync();
             if (navigation.SelectedItem is TabItem { Content: ProjectTasksView }) RefreshTasks();
         };
-        navigation.SelectedIndex = 0; work.Children.Add(navigation);
-        var splitter = new GridSplitter { Width = 4, HorizontalAlignment = HorizontalAlignment.Stretch }; Grid.SetColumn(splitter, 1); work.Children.Add(splitter);
-        var editing = new Grid(); editing.Children.Add(tabs); placeholder.Margin = new(16); placeholder.TextAlignment = TextAlignment.Center; placeholder.HorizontalAlignment = HorizontalAlignment.Center; placeholder.VerticalAlignment = VerticalAlignment.Center; editing.Children.Add(placeholder); Grid.SetColumn(editing, 2); work.Children.Add(editing);
+        navigation.SelectedIndex = 0; Grid.SetColumn(navigation, 2); work.Children.Add(navigation);
+        var splitter = new GridSplitter { Width = 4, HorizontalAlignment = HorizontalAlignment.Stretch }; Grid.SetColumn(splitter, 3); work.Children.Add(splitter);
+        var editing = new Grid(); editing.Children.Add(tabs); placeholder.Margin = new(16); placeholder.TextAlignment = TextAlignment.Center; placeholder.HorizontalAlignment = HorizontalAlignment.Center; placeholder.VerticalAlignment = VerticalAlignment.Center; editing.Children.Add(placeholder); Grid.SetColumn(editing, 4); work.Children.Add(editing);
         Grid.SetRow(work, 2); root.Children.Add(work);
         ProjectFrame = new Border { BorderBrush = Ui.Brush("#6E568F"), BorderThickness = new(1), CornerRadius = new(6), Margin = new(4), Background = Ui.Brush("#18181B"), Child = root };
         Content = ProjectFrame;
@@ -143,9 +151,18 @@ public sealed class ProjectView : UserControl, IDisposable
         if (navigation.SelectedIndex == 2) _ = gitView.RefreshAsync();
     }
     public void RefreshTree() { tree.Refresh(); RefreshTasks(); }
+    internal void SetTasksVisible(bool visible)
+    {
+        if (visible == TasksVisible) return;
+        if (!visible && tasksColumn.Width.Value > 0) tasksWidth = tasksColumn.Width;
+        tasksPanel.Visibility = tasksSplitter.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+        tasksColumn.MinWidth = visible ? 200 : 0; tasksColumn.Width = visible ? tasksWidth : new(0);
+        tasksSplitterColumn.Width = new(visible ? 4 : 0);
+        TaskCount.ToolTip = visible ? "Click to hide tasks" : "Click to show tasks";
+    }
     private void RefreshTasks()
     {
-        try { var count = tasksView.Refresh(); TaskCount.Text = count == 1 ? "1 task" : $"{count} tasks"; main.UpdateOpenTaskCount(Project, count); }
+        try { tasksPanel.Refresh(); var count = tasksView.Refresh(); TaskCount.Text = count == 1 ? "1 task" : $"{count} tasks"; main.UpdateOpenTaskCount(Project, count); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { main.Log($"[{Project.Entry.Name}] Cannot read open tasks: {ex.Message}"); }
     }
     public void ShowExplorer() => navigation.SelectedIndex = 0;
@@ -252,5 +269,5 @@ public sealed class ProjectView : UserControl, IDisposable
             : await main.Git.DiffAsync(Project.Entry.Path, current, diff.Staged);
         if (!disposed && tabs.SelectedItem == diff && diff.Editor.Text != text) diff.Editor.Text = text;
     }
-    public void Dispose() { if (disposed) return; disposed = true; monitor?.Dispose(); foreach (var editor in Editors) editor.Dispose(); language.Dispose(); gitView.Dispose(); }
+    public void Dispose() { if (disposed) return; disposed = true; tasksPanel.Dispose(); monitor?.Dispose(); foreach (var editor in Editors) editor.Dispose(); language.Dispose(); gitView.Dispose(); }
 }

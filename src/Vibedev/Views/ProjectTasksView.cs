@@ -36,7 +36,7 @@ internal sealed class ProjectTasksView : UserControl
     /// <summary>Counts open task files without a view, so closed projects can show their task count too.</summary>
     public static int CountOpenTasks(string projectPath) => OpenTaskFiles(Path.Combine(projectPath, "tasks", "open")).Length;
 
-    private static string[] OpenTaskFiles(string directory)
+    internal static string[] OpenTaskFiles(string directory)
     {
         try
         {
