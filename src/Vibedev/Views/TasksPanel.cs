@@ -30,7 +30,7 @@ internal sealed class TasksPanel : UserControl, IDisposable
         var title = Ui.Section("TASKS"); title.Margin = new(0, 0, 10, 0);
         count.VerticalAlignment = VerticalAlignment.Center; header.Children.Add(title); header.Children.Add(count);
         var top = new StackPanel { Background = Ui.Brush("#282431") };
-        top.Children.Add(header); top.Children.Add(Columns(Ui.Section("TASK"), Ui.Section("MODEL"), Ui.Section("EFFORT")));
+        top.Children.Add(header); top.Children.Add(Columns(new Border(), Ui.Section("TASK"), Ui.Section("MODEL"), Ui.Section("EFFORT")));
         DockPanel.SetDock(top, Dock.Top); root.Children.Add(top);
         Grid.SetIsSharedSizeScope(root, true);
         var content = new Grid(); content.Children.Add(files); empty.Margin = new(14); empty.VerticalAlignment = VerticalAlignment.Top; content.Children.Add(empty);
@@ -50,19 +50,28 @@ internal sealed class TasksPanel : UserControl, IDisposable
         Refresh(true);
     }
 
-    private static Grid Columns(UIElement name, UIElement model, UIElement effort)
+    private static Grid Columns(UIElement copy, UIElement name, UIElement model, UIElement effort)
     {
         var grid = new Grid { Margin = new(14, 4, 14, 4) };
+        grid.ColumnDefinitions.Add(new() { Width = GridLength.Auto, SharedSizeGroup = "copy", MinWidth = 44 });
         grid.ColumnDefinitions.Add(new() { Width = GridLength.Auto, SharedSizeGroup = "name", MinWidth = 80, MaxWidth = 280 });
         grid.ColumnDefinitions.Add(new() { Width = GridLength.Auto, SharedSizeGroup = "model", MinWidth = 90 });
         grid.ColumnDefinitions.Add(new() { Width = GridLength.Auto, SharedSizeGroup = "effort", MinWidth = 70 });
-        Grid.SetColumn(model, 1); Grid.SetColumn(effort, 2);
-        foreach (var cell in new[] { name, model, effort })
+        Grid.SetColumn(name, 1); Grid.SetColumn(model, 2); Grid.SetColumn(effort, 3);
+        foreach (var cell in new[] { copy, name, model, effort })
         {
-            if (cell is FrameworkElement element && !ReferenceEquals(cell, name)) element.Margin = new(12, 0, 0, 0);
+            if (cell is FrameworkElement element && !ReferenceEquals(cell, copy)) element.Margin = new(12, 0, 0, 0);
             grid.Children.Add(cell);
         }
         return grid;
+    }
+
+    /// <summary>The `/task` command for a task file: its leading number (`123-fix-x.md` gives `123`), else the file name without extension.</summary>
+    internal static string TaskCommand(string path)
+    {
+        var stem = Path.GetFileNameWithoutExtension(path);
+        var digits = new string(stem.TakeWhile(char.IsDigit).ToArray());
+        return "/task " + (digits.Length > 0 ? digits : stem);
     }
 
     public int Refresh(bool force = false)
@@ -79,7 +88,10 @@ internal sealed class TasksPanel : UserControl, IDisposable
             var label = Ui.Text(Path.GetRelativePath(directory, path), 12); label.TextWrapping = TextWrapping.NoWrap; label.TextTrimming = TextTrimming.CharacterEllipsis; label.VerticalAlignment = VerticalAlignment.Center;
             var model = Ui.Text(meta.Model.Length > 0 ? meta.Model : "—", 12, meta.Model.Length > 0 ? "#C4B5DB" : "#777784"); model.TextWrapping = TextWrapping.NoWrap; model.VerticalAlignment = VerticalAlignment.Center;
             var effort = Ui.Text(meta.Effort.Length > 0 ? meta.Effort : "—", 12, meta.Effort.Length > 0 ? "#FBBF24" : "#777784"); effort.TextWrapping = TextWrapping.NoWrap; effort.VerticalAlignment = VerticalAlignment.Center;
-            var row = Columns(label, model, effort); row.Margin = new(0);
+            var command = TaskCommand(path);
+            var copy = Ui.Button("copy", () => { try { Clipboard.SetText(command); } catch (System.Runtime.InteropServices.ExternalException) { } });
+            copy.Padding = new(6, 0, 6, 0); copy.FontSize = 11; copy.VerticalAlignment = VerticalAlignment.Center; copy.ToolTip = $"Copy \"{command}\"";
+            var row = Columns(copy, label, model, effort); row.Margin = new(0);
             var item = new ListBoxItem { Content = row, Tag = path, ToolTip = path, Padding = new(10, 5, 10, 5), HorizontalContentAlignment = HorizontalAlignment.Stretch };
             files.Items.Add(item);
             if (path.Equals(selected, StringComparison.OrdinalIgnoreCase)) files.SelectedItem = item;
