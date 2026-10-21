@@ -20,7 +20,7 @@ internal sealed class ImageTab : TabItem
         title.SetBinding(TextBlock.ForegroundProperty, new System.Windows.Data.Binding(nameof(Foreground)) { Source = this });
         var row = Ui.Row(icon, title);
         var button = Ui.Button("×", () => close(this)); button.Padding = new(5, 0, 5, 0); button.Margin = new(10, 0, 0, 0); button.BorderThickness = new(0); button.Background = Brushes.Transparent; button.ToolTip = "Close image";
-        row.Children.Add(button); Header = row; ToolTip = path;
+        row.Children.Add(button); Header = row; ToolTip = path; Ui.CloseOnMiddleClick(this, () => close(this));
 
         var bitmap = new BitmapImage();
         bitmap.BeginInit(); bitmap.CacheOption = BitmapCacheOption.OnLoad; bitmap.UriSource = new Uri(path); bitmap.EndInit(); bitmap.Freeze();

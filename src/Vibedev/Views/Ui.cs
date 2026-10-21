@@ -8,6 +8,9 @@ public static class Ui
 {
     public static SolidColorBrush Brush(string hex) => (SolidColorBrush)new BrushConverter().ConvertFromString(hex)!;
     public static TextBlock Text(string text, double size = 13, string color = "#E4E4E7") => new() { Text = text, FontSize = size, Foreground = Brush(color), TextWrapping = TextWrapping.Wrap };
+    /// <summary>Closes the tab when its header is middle-clicked.</summary>
+    public static void CloseOnMiddleClick(TabItem tab, Action close) =>
+        tab.PreviewMouseUp += (_, e) => { if (e.ChangedButton == System.Windows.Input.MouseButton.Middle) { e.Handled = true; close(); } };
     /// <summary>Small uppercase heading for a panel section (FILES, STAGED, …).</summary>
     public static TextBlock Section(string text)
     {

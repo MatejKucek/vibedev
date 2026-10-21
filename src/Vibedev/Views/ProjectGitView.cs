@@ -15,12 +15,11 @@ public sealed class ProjectGitView : UserControl, IDisposable
     private readonly TextBlock activity = Ui.Text("", 11, "#9898A6");
     private readonly TextBox message = new() { ToolTip = "Commit message", Margin = new(6), MinHeight = 32 };
     private readonly Grid workingView = new();
-    private readonly Grid historyView = new() { Visibility = Visibility.Collapsed };
+    private readonly Grid historyView = new();
     private readonly TreeView commits = new() { Padding = new(4, 4, 0, 8), HorizontalContentAlignment = HorizontalAlignment.Stretch };
     private readonly TextBlock historyStatus = Ui.Text("", 11, "#9898A6");
-    private readonly Button changesMode, historyMode;
     private readonly CancellationTokenSource lifetime = new();
-    private bool refreshing, disposed, showingHistory;
+    private bool refreshing, disposed;
     private Task? refreshTask, historyTask;
     internal IReadOnlyList<GitFileChange> Files { get; private set; } = [];
     internal ListBox ChangesList => changes;
@@ -29,13 +28,11 @@ public sealed class ProjectGitView : UserControl, IDisposable
     public ProjectGitView(MainWindow main, ProjectView owner)
     {
         this.main = main; this.owner = owner;
-        var shell = new DockPanel();
-        changesMode = Ui.Button("Changes", async () => await SetHistoryAsync(false));
-        historyMode = Ui.Button("Recent commits", async () => await SetHistoryAsync(true));
-        var modes = Ui.Row(changesMode, historyMode); modes.Margin = new(6, 6, 0, 2);
-        foreach (Button button in modes.Children) button.Padding = new(7, 4, 7, 4);
-        DockPanel.SetDock(modes, Dock.Top); shell.Children.Add(modes);
-        var content = new Grid(); content.Children.Add(workingView); content.Children.Add(historyView); shell.Children.Add(content);
+        var shell = new Grid();
+        shell.RowDefinitions.Add(new() { Height = new(3, GridUnitType.Star), MinHeight = 120 }); shell.RowDefinitions.Add(new() { Height = new(4) }); shell.RowDefinitions.Add(new() { Height = new(2, GridUnitType.Star), MinHeight = 100 });
+        shell.Children.Add(workingView);
+        var split = new GridSplitter { Height = 4, HorizontalAlignment = HorizontalAlignment.Stretch, VerticalAlignment = VerticalAlignment.Stretch }; Grid.SetRow(split, 1); shell.Children.Add(split);
+        Grid.SetRow(historyView, 2); shell.Children.Add(historyView);
         var root = workingView;
         root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new() { Height = GridLength.Auto });
         root.RowDefinitions.Add(new() { Height = GridLength.Auto }); root.RowDefinitions.Add(new());
@@ -64,7 +61,7 @@ public sealed class ProjectGitView : UserControl, IDisposable
         historyView.RowDefinitions.Add(new() { Height = GridLength.Auto }); historyView.RowDefinitions.Add(new());
         var historyTools = new DockPanel { Margin = new(8, 6, 6, 6) };
         var refreshHistory = Ui.Button("↻", async () => await RefreshHistoryAsync()); refreshHistory.Padding = new(7, 4, 7, 4); refreshHistory.ToolTip = "Refresh recent commits";
-        DockPanel.SetDock(refreshHistory, Dock.Right); historyTools.Children.Add(refreshHistory); historyTools.Children.Add(Ui.Text("Latest 100 commits", 11, "#9898A6")); historyView.Children.Add(historyTools);
+        DockPanel.SetDock(refreshHistory, Dock.Right); historyTools.Children.Add(refreshHistory); historyTools.Children.Add(Ui.Section("RECENT COMMITS")); historyView.Children.Add(historyTools);
         ScrollViewer.SetHorizontalScrollBarVisibility(commits, ScrollBarVisibility.Disabled);
         Grid.SetRow(commits, 1); historyView.Children.Add(commits);
         historyStatus.Margin = new(12, 8, 12, 8); historyStatus.Visibility = Visibility.Collapsed; Grid.SetRow(historyStatus, 1); historyView.Children.Add(historyStatus);
@@ -77,7 +74,7 @@ public sealed class ProjectGitView : UserControl, IDisposable
                 e.Handled = true; await ShowCommitDiffAsync(commit, file);
             }
         };
-        UpdateMode(); Content = shell;
+        Content = shell; _ = RefreshHistoryAsync();
     }
     // Buttons dock right first so the label trims instead of overlapping them in a narrow sidebar.
     private static DockPanel SectionHeader(string title, params Button[] buttons)
@@ -87,20 +84,6 @@ public sealed class ProjectGitView : UserControl, IDisposable
         foreach (var button in buttons) { button.Padding = new(7, 3, 7, 3); button.Margin = new(4, 0, 0, 0); }
         var label = Ui.Section(title); label.TextWrapping = TextWrapping.NoWrap; label.TextTrimming = TextTrimming.CharacterEllipsis; header.Children.Add(label);
         return header;
-    }
-    private async Task SetHistoryAsync(bool show)
-    {
-        showingHistory = show; UpdateMode();
-        if (show) await RefreshHistoryAsync(); else await RefreshAsync();
-    }
-    private void UpdateMode()
-    {
-        workingView.Visibility = showingHistory ? Visibility.Collapsed : Visibility.Visible;
-        historyView.Visibility = showingHistory ? Visibility.Visible : Visibility.Collapsed;
-        changesMode.Background = Ui.Brush(showingHistory ? "#2A2A30" : "#343044");
-        historyMode.Background = Ui.Brush(showingHistory ? "#343044" : "#2A2A30");
-        changesMode.BorderBrush = Ui.Brush(showingHistory ? "#3C3C44" : "#A78BFA");
-        historyMode.BorderBrush = Ui.Brush(showingHistory ? "#A78BFA" : "#3C3C44");
     }
     private Task RefreshHistoryAsync()
     {
@@ -133,7 +116,12 @@ public sealed class ProjectGitView : UserControl, IDisposable
     }
     private TreeViewItem CommitNode(GitCommit commit)
     {
-        var label = Ui.Text($"{commit.ShortHash}  {commit.Subject}", 11); label.TextWrapping = TextWrapping.NoWrap; label.TextTrimming = TextTrimming.CharacterEllipsis;
+        // Monospaced timestamp and hash keep the subject column aligned across rows.
+        var mono = new System.Windows.Media.FontFamily("Consolas");
+        var label = Ui.Text("", 11); label.TextWrapping = TextWrapping.NoWrap; label.TextTrimming = TextTrimming.CharacterEllipsis;
+        label.Inlines.Add(new System.Windows.Documents.Run(commit.Date.LocalDateTime.ToString("MM.dd HH:mm") + "  ") { FontFamily = mono, Foreground = Ui.Brush("#9898A6") });
+        label.Inlines.Add(new System.Windows.Documents.Run(commit.ShortHash.PadRight(7) + "  ") { FontFamily = mono, Foreground = Ui.Brush("#A78BFA") });
+        label.Inlines.Add(new System.Windows.Documents.Run(commit.Subject));
         var item = new TreeViewItem { Tag = commit, Header = label, ToolTip = $"{commit.Subject}\n{commit.Author} · {commit.Date.LocalDateTime:g}\n{commit.Hash}", Style = (Style)Application.Current.FindResource("ProjectTreeItem") };
         label.MouseLeftButtonUp += (_, e) => { e.Handled = true; item.IsSelected = true; item.IsExpanded = !item.IsExpanded; };
         item.Items.Add(Ui.Text("Loading files…", 11, "#9898A6"));
@@ -209,7 +197,7 @@ public sealed class ProjectGitView : UserControl, IDisposable
         catch (Exception ex) { if (!disposed) { Files = []; staged.Items.Clear(); changes.Items.Clear(); status.Text = ex.Message; } }
         finally { refreshing = false; }
         RefreshStatus();
-        if (showingHistory) await RefreshHistoryAsync();
+        await RefreshHistoryAsync();
     }
     private static void Populate(ListBox list, IEnumerable<GitFileChange> files, bool isStaged)
     {

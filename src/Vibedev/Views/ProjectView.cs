@@ -10,6 +10,7 @@ namespace Vibedev.Views;
 
 public sealed class ProjectView : UserControl, IDisposable
 {
+    private const int GitTab = 0;
     private readonly MainWindow main;
     private readonly ProjectFileTree tree;
     private readonly TabControl navigation = new();
@@ -91,20 +92,20 @@ public sealed class ProjectView : UserControl, IDisposable
         foreach (Button button in actions.Children) button.Padding = new(9, 5, 9, 5);
         Grid.SetRow(tools, 1); root.Children.Add(tools);
         var work = new Grid(); work.ColumnDefinitions.Add(tasksColumn); work.ColumnDefinitions.Add(tasksSplitterColumn);
-        work.ColumnDefinitions.Add(new() { Width = new(200), MinWidth = 130 }); work.ColumnDefinitions.Add(new() { Width = new(4) }); work.ColumnDefinitions.Add(new() { MinWidth = 120 });
+        work.ColumnDefinitions.Add(new() { Width = new(340), MinWidth = 130 }); work.ColumnDefinitions.Add(new() { Width = new(4) }); work.ColumnDefinitions.Add(new() { MinWidth = 120 });
         work.Children.Add(tasksPanel); tasksSplitter.HorizontalAlignment = HorizontalAlignment.Stretch; Grid.SetColumn(tasksSplitter, 1); work.Children.Add(tasksSplitter);
         var explorer = new DockPanel { Background = Ui.Brush("#1D1D21") };
         var fileHeader = new DockPanel { Margin = new(10, 8, 4, 8) }; var refresh = Ui.Button("↻", RefreshTree); refresh.Padding = new(6, 2, 6, 2); refresh.ToolTip = "Refresh files, preserving expanded folders"; DockPanel.SetDock(refresh, Dock.Right); fileHeader.Children.Add(refresh); fileHeader.Children.Add(Ui.Section("FILES")); DockPanel.SetDock(fileHeader, Dock.Top); explorer.Children.Add(fileHeader); explorer.Children.Add(tree);
         navigation.Style = (Style)Application.Current.FindResource(typeof(TabControl));
+        navigation.Items.Add(new TabItem { Header = "Git", Content = gitView, ToolTip = "Review diffs, stage files and commit changes", Style = (Style)Application.Current.FindResource(typeof(TabItem)), Padding = new Thickness(8, 8, 8, 8) });
         navigation.Items.Add(new TabItem { Header = "Explorer", Content = explorer, ToolTip = "Browse project files", Style = (Style)Application.Current.FindResource(typeof(TabItem)), Padding = new Thickness(8, 8, 8, 8) });
         navigation.Items.Add(new TabItem { Header = "Search", Content = search, ToolTip = "Search files and contents (Ctrl+Shift+F), or filenames (Ctrl+P)", Style = (Style)Application.Current.FindResource(typeof(TabItem)), Padding = new Thickness(8, 8, 8, 8) });
-        navigation.Items.Add(new TabItem { Header = "Git", Content = gitView, ToolTip = "Review diffs, stage files and commit changes", Style = (Style)Application.Current.FindResource(typeof(TabItem)), Padding = new Thickness(8, 8, 8, 8) });
         navigation.Items.Add(new TabItem { Header = "Tasks", Content = tasksView, ToolTip = "Open task files in tasks/open", Style = (Style)Application.Current.FindResource(typeof(TabItem)), Padding = new Thickness(8, 8, 8, 8) });
         navigation.FontSize = 12;
         navigation.SelectionChanged += async (_, e) =>
         {
             if (!ReferenceEquals(e.Source, navigation)) return;
-            if (navigation.SelectedIndex == 2) await gitView.RefreshAsync();
+            if (navigation.SelectedIndex == GitTab) await gitView.RefreshAsync();
             if (navigation.SelectedItem is TabItem { Content: ProjectTasksView }) RefreshTasks();
         };
         navigation.SelectedIndex = 0; Grid.SetColumn(navigation, 2); work.Children.Add(navigation);
@@ -148,7 +149,7 @@ public sealed class ProjectView : UserControl, IDisposable
     {
         run.IsEnabled = launches.Items.Count > 0 && main.RunningProject is null;
         gitView.RefreshStatus();
-        if (navigation.SelectedIndex == 2) _ = gitView.RefreshAsync();
+        if (navigation.SelectedIndex == GitTab) _ = gitView.RefreshAsync();
     }
     public void RefreshTree() { tree.Refresh(); RefreshTasks(); }
     internal void SetTasksVisible(bool visible)
@@ -165,9 +166,9 @@ public sealed class ProjectView : UserControl, IDisposable
         try { tasksPanel.Refresh(); var count = tasksView.Refresh(); TaskCount.Text = count == 1 ? "1 task" : $"{count} tasks"; main.UpdateOpenTaskCount(Project, count); }
         catch (Exception ex) when (ex is IOException or UnauthorizedAccessException) { main.Log($"[{Project.Entry.Name}] Cannot read open tasks: {ex.Message}"); }
     }
-    public void ShowExplorer() => navigation.SelectedIndex = 0;
-    internal void ShowGit() => navigation.SelectedIndex = 2;
-    public void ShowSearch(bool filenames = false) { navigation.SelectedIndex = 1; search.FocusSearch(filenames); }
+    public void ShowExplorer() => navigation.SelectedIndex = 1;
+    internal void ShowGit() => navigation.SelectedIndex = GitTab;
+    public void ShowSearch(bool filenames = false) { navigation.SelectedIndex = 2; search.FocusSearch(filenames); }
     public async Task OpenSearchHitAsync(ProjectSearchHit hit)
     {
         await OpenFileAsync(hit.FilePath);
@@ -233,7 +234,7 @@ public sealed class ProjectView : UserControl, IDisposable
                 }
             }
         }
-        if (navigation.SelectedIndex == 2) await gitView.RefreshAsync();
+        if (navigation.SelectedIndex == GitTab) await gitView.RefreshAsync();
         await language.FilesChangedAsync(changes);
         main.ScheduleGitRefresh();
         if (retry is not null) throw retry;

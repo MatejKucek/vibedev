@@ -23,7 +23,7 @@ internal sealed class GitDiffTab : TabItem
         var row = Ui.Row(icon, title);
         if (detail is not null) { var suffix = Ui.Text(detail, 11, "#9898A6"); suffix.Margin = new(6, 0, 0, 0); suffix.VerticalAlignment = VerticalAlignment.Center; row.Children.Add(suffix); }
         var button = Ui.Button("×", () => close(this)); button.Padding = new(5, 0, 5, 0); button.Margin = new(10, 0, 0, 0); button.BorderThickness = new(0); button.Background = Brushes.Transparent; button.ToolTip = "Close diff";
-        row.Children.Add(button); Header = row; ToolTip = key;
+        row.Children.Add(button); Header = row; ToolTip = key; Ui.CloseOnMiddleClick(this, () => close(this));
         Editor = new() { Text = diff, IsReadOnly = true, Background = Ui.Brush("#18181B"), Foreground = Ui.Brush("#D4D4DC"), FontFamily = new("Cascadia Code, Consolas"), FontSize = 12, Padding = new(8) };
         EditorGutter.Apply(Editor); Editor.TextArea.TextView.LineTransformers.Add(new DiffColors()); Content = Editor;
     }

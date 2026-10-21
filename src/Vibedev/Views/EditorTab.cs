@@ -46,7 +46,7 @@ public sealed class EditorTab : TabItem, IDisposable
         title.SetBinding(TextBlock.ForegroundProperty, new System.Windows.Data.Binding(nameof(Foreground)) { Source = this });
         var x = Ui.Button("×", () => close(this)); x.Padding = new(5, 0, 5, 0); x.Margin = new(10, 0, 0, 0); x.BorderThickness = new(0); x.Background = Brushes.Transparent;
         Header = Ui.Row(title, x); ToolTip = file.Path;
-        x.ToolTip = "Close file (Ctrl+W)";
+        x.ToolTip = "Close file (Ctrl+W, or middle-click the tab)"; Ui.CloseOnMiddleClick(this, () => close(this));
         editor = new TextEditor
         {
             Text = file.Text, Background = Ui.Brush("#18181B"), Foreground = Ui.Brush("#D4D4DC"),
