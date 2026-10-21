@@ -30,7 +30,7 @@ public sealed class ProjectView : UserControl, IDisposable
     private readonly Dictionary<string, string> refreshWarnings = new(StringComparer.OrdinalIgnoreCase);
     private readonly ComboBox launches = new() { MinWidth = 60, MaxWidth = 360, HorizontalAlignment = HorizontalAlignment.Stretch, Margin = new(0, 0, 6, 0), DisplayMemberPath = "Name", ToolTip = ".vscode/launch.json", Tag = "No launch configurations" };
     private readonly Button run;
-    private readonly TextBlock placeholder = Ui.Text("Open a file to start editing\n\nCtrl+P   Find a file\nCtrl+Shift+F   Search this project", 13, "#9898A6");
+    private readonly TextBlock placeholder = Ui.Text("Open a file to start editing\n\nF   Quick open a file\nCtrl+P   Find a file in the sidebar\nCtrl+Shift+F   Search this project", 13, "#9898A6");
     public ProjectState Project { get; }
     public IEnumerable<EditorTab> Editors => tabs.Items.OfType<EditorTab>();
     public Action<Orientation>? SplitRequested { get; set; }
@@ -63,7 +63,7 @@ public sealed class ProjectView : UserControl, IDisposable
         identity.ColumnDefinitions.Add(new() { Width = GridLength.Auto, MaxWidth = 160 }); identity.ColumnDefinitions.Add(new() { Width = GridLength.Auto }); identity.ColumnDefinitions.Add(new());
         ProjectTitle = Ui.Text(project.Entry.Name, 14);
         ProjectTitle.FontWeight = FontWeights.SemiBold; ProjectTitle.TextWrapping = TextWrapping.NoWrap; ProjectTitle.TextTrimming = TextTrimming.CharacterEllipsis;
-        ProjectTitle.Margin = new(0, 0, 10, 0); ProjectTitle.VerticalAlignment = VerticalAlignment.Center; ProjectTitle.ToolTip = project.Entry.Path + "\nDrag the name to move or dock this panel\nF: toggle focus mode (outside text inputs)\nRight-click for Git, float/dock, close and panel layout actions";
+        ProjectTitle.Margin = new(0, 0, 10, 0); ProjectTitle.VerticalAlignment = VerticalAlignment.Center; ProjectTitle.ToolTip = project.Entry.Path + "\nDrag the name to move or dock this panel\nF: quick open file · Shift+F: toggle focus mode (outside text inputs)\nRight-click for Git, float/dock, close and panel layout actions";
         ProjectDragHandle.Attach(ProjectTitle, point => DragRequested?.Invoke(point));
         identity.Children.Add(ProjectTitle);
         TaskCount.Margin = new(0, 0, 10, 0); TaskCount.VerticalAlignment = VerticalAlignment.Center; TaskCount.TextWrapping = TextWrapping.NoWrap; TaskCount.ToolTip = "Click to hide tasks"; TaskCount.Cursor = Cursors.Hand; TaskCount.MouseLeftButtonUp += (_, e) => { e.Handled = true; SetTasksVisible(!TasksVisible); }; Grid.SetColumn(TaskCount, 1); identity.Children.Add(TaskCount);
@@ -168,7 +168,13 @@ public sealed class ProjectView : UserControl, IDisposable
     }
     public void ShowExplorer() => navigation.SelectedIndex = 1;
     internal void ShowGit() => navigation.SelectedIndex = GitTab;
+    internal void ShowCommit() { ShowGit(); gitView.FocusMessage(); }
     public void ShowSearch(bool filenames = false) { navigation.SelectedIndex = 2; search.FocusSearch(filenames); }
+    internal async Task ShowFileFinderAsync()
+    {
+        var dialog = new FileFinderDialog(Window.GetWindow(this)!, Project.Entry.Path);
+        if (dialog.ShowDialog() == true && dialog.SelectedPath is { } relative) await OpenFileAsync(Path.GetFullPath(relative, Project.Entry.Path));
+    }
     public async Task OpenSearchHitAsync(ProjectSearchHit hit)
     {
         await OpenFileAsync(hit.FilePath);

@@ -100,6 +100,13 @@ internal sealed class EditorLanguageFeatures : IDisposable, IBackgroundRenderer
             var start = offset;
             while (start > 0 && (char.IsLetterOrDigit(Editor.Document.GetCharAt(start - 1)) || Editor.Document.GetCharAt(start - 1) == '_')) start--;
             window.StartOffset = start;
+            // AvalonEdit's CompletionListBox is a ListBox subclass, so the app's implicit dark styles skip it and light item text lands on white.
+            window.Background = Ui.Brush("#24242A"); window.Foreground = Ui.Brush("#E4E4E7");
+            window.BorderBrush = Ui.Brush("#605272"); window.BorderThickness = new(1);
+            window.CompletionList.Background = window.Background; window.CompletionList.Foreground = window.Foreground;
+            window.CompletionList.ListBox.Background = window.Background; window.CompletionList.ListBox.Foreground = window.Foreground;
+            window.CompletionList.ListBox.BorderThickness = new(0);
+            window.CompletionList.ListBox.Resources[typeof(ListBoxItem)] = CompletionItemStyle();
             var source = new TextDocument(Editor.Text); var sourceVersion = Editor.Document.Version;
             foreach (var item in items.EnumerateArray().OrderBy(i => i.TryGetProperty("sortText", out var sort) ? sort.GetString() : i.GetProperty("label").GetString()))
                 if (!item.TryGetProperty("insertTextFormat", out var format) || format.GetInt32() != 2) window.CompletionList.CompletionData.Add(new LspCompletion(item.Clone(), this, source, sourceVersion));
@@ -109,6 +116,14 @@ internal sealed class EditorLanguageFeatures : IDisposable, IBackgroundRenderer
             window.Show();
         }
         catch (Exception ex) { if (!disposed) log("C# completion: " + ex.Message); }
+    }
+    private static Style CompletionItemStyle()
+    {
+        // Based on the app's dark ListBoxItem template (selection/hover colors); only tighten padding and force light text.
+        var style = new Style(typeof(ListBoxItem), Application.Current.TryFindResource(typeof(ListBoxItem)) as Style);
+        style.Setters.Add(new Setter(Control.ForegroundProperty, Ui.Brush("#E4E4E7")));
+        style.Setters.Add(new Setter(Control.PaddingProperty, new Thickness(6, 2, 6, 2)));
+        return style;
     }
     internal async Task GoToDefinitionAsync()
     {

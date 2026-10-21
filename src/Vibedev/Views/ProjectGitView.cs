@@ -74,6 +74,8 @@ public sealed class ProjectGitView : UserControl, IDisposable
                 e.Handled = true; await ShowCommitDiffAsync(commit, file);
             }
         };
+        message.ToolTip = "Commit message · Enter: commit all, pull & push";
+        message.KeyDown += async (_, e) => { if (e.Key == System.Windows.Input.Key.Enter) { e.Handled = true; await CommitAllAndSyncAsync(); } };
         Content = shell; _ = RefreshHistoryAsync();
     }
     // Buttons dock right first so the label trims instead of overlapping them in a narrow sidebar.
@@ -234,6 +236,7 @@ public sealed class ProjectGitView : UserControl, IDisposable
         if (await main.ChangeGitIndexAsync(owner.Project, () => main.Git.CommitStagedAsync(owner.Project.Entry.Path, message.Text, main.Log, lifetime.Token))) message.Clear();
         await RefreshAsync();
     }
+    internal void FocusMessage() => _ = Dispatcher.BeginInvoke(() => { message.Focus(); message.SelectAll(); }, System.Windows.Threading.DispatcherPriority.Input);
     private async Task CommitAllAndSyncAsync()
     {
         if (string.IsNullOrWhiteSpace(message.Text)) { message.Focus(); return; }

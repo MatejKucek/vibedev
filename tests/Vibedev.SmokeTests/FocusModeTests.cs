@@ -35,12 +35,13 @@ internal static partial class Program
         var parents = documents.Select(d => d.Parent).ToArray();
         var before = Path.Combine(root, "before.xml"); new XmlLayoutSerializer(window.Dock).Serialize(before);
 
+        window.Modifiers = () => ModifierKeys.Shift;
         KeyEventArgs PressF(UIElement source)
         {
             var key = new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(source)!, 0, Key.F) { RoutedEvent = Keyboard.PreviewKeyDownEvent };
             source.RaiseEvent(key); window.UpdateLayout(); return key;
         }
-        Check(PressF(view.ProjectTitle).Handled && window.FocusModeActive, "Plain F on the project header enters focus mode");
+        Check(PressF(view.ProjectTitle).Handled && window.FocusModeActive, "Shift+F on the project header enters focus mode");
         await Task.Delay(50); window.UpdateLayout();
         Check(view.ActualWidth >= window.Dock.ActualWidth - 16 && view.ActualHeight >= window.Dock.ActualHeight - 16 &&
               documents.Where(d => d != first).All(d => !((ProjectView)d.Content).IsVisible), "Focused project fills the docking workspace across nested horizontal and vertical splits");
@@ -49,7 +50,7 @@ internal static partial class Program
         var during = Path.Combine(root, "during.xml"); new XmlLayoutSerializer(window.Dock).Serialize(during);
         Check(File.ReadAllText(before) == File.ReadAllText(during), "Focus mode leaves the serialized docking layout unchanged");
         await CaptureAsync(window, "focus-mode.png");
-        Check(PressF(view.ProjectTitle).Handled && !window.FocusModeActive, "Pressing F again restores the split layout");
+        Check(PressF(view.ProjectTitle).Handled && !window.FocusModeActive, "Pressing Shift+F again restores the split layout");
         Check(documents.SequenceEqual(window.Documents()) && parents.SequenceEqual(documents.Select(d => d.Parent)) &&
               documents.Select((d, i) => Math.Abs(((ProjectView)d.Content).ActualWidth - sizes[i].Item1) < 1 && Math.Abs(((ProjectView)d.Content).ActualHeight - sizes[i].Item2) < 1 && ((ProjectView)d.Content).IsVisible).All(x => x),
             "Leaving focus mode restores every panel's size, position and content");

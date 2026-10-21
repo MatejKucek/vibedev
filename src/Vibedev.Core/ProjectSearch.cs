@@ -68,6 +68,17 @@ public static class ProjectSearch
             return new(hits, searched, false, warnings);
         }, cancellation);
 
+    /// <summary>Project files as relative paths, skipping excluded folders and directory links.</summary>
+    public static Task<IReadOnlyList<string>> ListFilesAsync(string root, CancellationToken cancellation = default)
+        => Task.Run<IReadOnlyList<string>>(async () =>
+        {
+            root = Path.GetFullPath(root);
+            if (!Directory.Exists(root)) throw new DirectoryNotFoundException(root);
+            var files = await CandidatesAsync(root, [], cancellation);
+            return files.Where(p => File.Exists(p) && !LinkedPath(root, p)).Select(p => Path.GetRelativePath(root, p))
+                .Where(r => !r.Split(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar).Any(Excluded.Contains)).ToArray();
+        }, cancellation);
+
     private static async Task<IReadOnlyList<string>> CandidatesAsync(string root, List<string> warnings, CancellationToken cancellation)
     {
         try

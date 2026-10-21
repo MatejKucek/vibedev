@@ -293,14 +293,42 @@ public partial class MainWindow : Window
             name.Foreground = Ui.Brush(active || open.Contains((ProjectState)item.Tag) ? "#F4F4F5" : "#D4D4DC");
         }
     }
-    internal void HandleFocusKey(KeyEventArgs e)
+    // Tests synthesize key events, which cannot change the real keyboard state.
+    // 1-9 switch to the numbered sidebar project; C jumps to the active project's commit message.
+    private bool HandleProjectKey(KeyEventArgs e)
     {
-        if (e.Handled || e.Key != Key.F || Keyboard.Modifiers != ModifierKeys.None || IsTextInput(e.OriginalSource as DependencyObject)) return;
-        if (e.IsRepeat) { e.Handled = true; return; }
-        if (FocusModeActive || Documents().Any(d => d.IsActive && d.Content is ProjectView))
+        var number = e.Key is >= Key.D1 and <= Key.D9 ? e.Key - Key.D0 : e.Key is >= Key.NumPad1 and <= Key.NumPad9 ? e.Key - Key.NumPad0 : 0;
+        if (number > 0)
         {
             e.Handled = true;
+            if (!e.IsRepeat && number <= numberedProjects.Count) OpenProject(numberedProjects[number - 1]);
+            return true;
+        }
+        if (e.Key != Key.C) return false;
+        if (Documents().FirstOrDefault(d => d.IsActive && d.Content is ProjectView)?.Content is not ProjectView active) return false;
+        e.Handled = true;
+        if (!e.IsRepeat) active.ShowCommit();
+        return true;
+    }
+    private List<ProjectState> numberedProjects = [];
+    internal Func<ModifierKeys> Modifiers { get; set; } = () => Keyboard.Modifiers;
+    internal void HandleFocusKey(KeyEventArgs e)
+    {
+        var modifiers = Modifiers();
+        if (!e.Handled && modifiers == ModifierKeys.None && !IsTextInput(e.OriginalSource as DependencyObject) && HandleProjectKey(e)) return;
+        if (e.Handled || e.Key != Key.F || modifiers is not (ModifierKeys.None or ModifierKeys.Shift) || IsTextInput(e.OriginalSource as DependencyObject)) return;
+        if (e.IsRepeat) { e.Handled = true; return; }
+        var active = Documents().FirstOrDefault(d => d.IsActive && d.Content is ProjectView)?.Content as ProjectView;
+        if (modifiers == ModifierKeys.Shift)
+        {
+            if (!FocusModeActive && active is null) return;
+            e.Handled = true;
             ToggleFocusMode();
+        }
+        else if (active is not null)
+        {
+            e.Handled = true;
+            _ = active.ShowFileFinderAsync();
         }
     }
     private static bool IsTextInput(DependencyObject? element)
@@ -709,18 +737,21 @@ public partial class MainWindow : Window
         var selected = (ProjectList.SelectedItem as ListBoxItem)?.Tag as ProjectState;
         ProjectList.Items.Clear();
         sidebarTaskCounts.Clear(); sidebarIndicators.Clear();
+        numberedProjects = ListedProjects.Take(9).ToList();
         foreach (var p in ListedProjects)
         {
             var text = new StackPanel(); var title = Ui.Text(p.Entry.Name, 12); title.TextTrimming = TextTrimming.CharacterEllipsis; title.TextWrapping = TextWrapping.NoWrap;
             var indicator = DashboardView.CreateIndicator(p); sidebarIndicators[p] = indicator;
             var heading = new DockPanel(); heading.Children.Add(indicator); heading.Children.Add(title); text.Children.Add(heading);
             var branch = Ui.Text(p.Failed ? p.Activity : p.Git?.Summary ?? "Local project", 11, p.Failed ? "#F87171" : "#A1A1AA"); branch.TextTrimming = TextTrimming.CharacterEllipsis; branch.TextWrapping = TextWrapping.NoWrap; branch.Margin = new(18, 3, 0, 0); text.Children.Add(branch);
-            var row = new Grid { ColumnDefinitions = { new() { Width = new GridLength(1, GridUnitType.Star) }, new() { Width = new GridLength(24) }, new() { Width = new GridLength(30) }, new() { Width = new GridLength(30) } } };
-            row.Children.Add(text);
-            var pull = PullIndicator(p); Grid.SetColumn(pull, 1); row.Children.Add(pull);
-            var tasks = Ui.Text("", 11); tasks.TextAlignment = TextAlignment.Right; tasks.VerticalAlignment = VerticalAlignment.Center; SetTaskCount(tasks, p.OpenTaskCount); Grid.SetColumn(tasks, 2); row.Children.Add(tasks); sidebarTaskCounts[p] = tasks;
+            var row = new Grid { ColumnDefinitions = { new() { Width = new GridLength(20) }, new() { Width = new GridLength(1, GridUnitType.Star) }, new() { Width = new GridLength(24) }, new() { Width = new GridLength(30) }, new() { Width = new GridLength(30) } } };
+            Grid.SetColumn(text, 1); row.Children.Add(text);
+            var pull = PullIndicator(p); Grid.SetColumn(pull, 2); row.Children.Add(pull);
+            var tasks = Ui.Text("", 11); tasks.TextAlignment = TextAlignment.Right; tasks.VerticalAlignment = VerticalAlignment.Center; SetTaskCount(tasks, p.OpenTaskCount); Grid.SetColumn(tasks, 3); row.Children.Add(tasks); sidebarTaskCounts[p] = tasks;
             var changed = p.Git?.IsRepository == true ? p.Git.Changes : 0;
-            var dirty = Ui.Text(changed > 0 ? changed.ToString() : "", 11, "#FB923C"); dirty.FontWeight = FontWeights.SemiBold; dirty.TextAlignment = TextAlignment.Right; dirty.VerticalAlignment = VerticalAlignment.Center; dirty.ToolTip = changed == 1 ? "1 uncommitted file" : $"{changed} uncommitted files"; Grid.SetColumn(dirty, 3); row.Children.Add(dirty);
+            var dirty = Ui.Text(changed > 0 ? changed.ToString() : "", 11, "#FB923C"); dirty.FontWeight = FontWeights.SemiBold; dirty.TextAlignment = TextAlignment.Right; dirty.VerticalAlignment = VerticalAlignment.Center; dirty.ToolTip = changed == 1 ? "1 uncommitted file" : $"{changed} uncommitted files"; Grid.SetColumn(dirty, 4); row.Children.Add(dirty);
+            var slot = numberedProjects.IndexOf(p);
+            var number = Ui.Text(slot >= 0 ? (slot + 1).ToString() : "", 11, "#A78BFA"); number.FontWeight = FontWeights.SemiBold; number.VerticalAlignment = VerticalAlignment.Center; number.ToolTip = slot >= 0 ? $"Press {slot + 1} to open this project" : null; row.Children.Add(number);
             var frame = new Border { Child = row, Padding = new(8, 8, 10, 8), BorderThickness = new(2, 0, 0, 0), BorderBrush = System.Windows.Media.Brushes.Transparent, CornerRadius = new(3) };
             var item = new ListBoxItem { Content = frame, Tag = p, Padding = new(0), Margin = new(0, 0, 0, 2), ToolTip = p.Entry.Path + (p.Git?.IsRepository == true ? "\n" + p.Git.Branch : "") + "\nClick to open; drag out to create a new project window" }; ProjectList.Items.Add(item); if (p == selected) ProjectList.SelectedItem = item;
             AttachSidebarDrag(item, p);

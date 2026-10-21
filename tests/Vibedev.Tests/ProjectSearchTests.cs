@@ -50,3 +50,20 @@ public sealed class ProjectSearchTests
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ProjectSearch.FindAsync(temp.Path, "needle", cancellation: cancellation.Token));
     }
 }
+
+public sealed class FuzzyMatchTests
+{
+    [Fact]
+    public void CamelHumpQueryFindsFilePlanner()
+    {
+        var ranked = FuzzyMatch.Rank(["src/Other.cs", "src/FilePlanner.cs", "src/Profile.cs"], "fipl", 10);
+        Assert.Equal("src/FilePlanner.cs", ranked[0]);
+        Assert.DoesNotContain("src/Other.cs", ranked);
+    }
+    [Fact]
+    public async Task ListFilesSkipsBuildFolders()
+    {
+        using var temp = new TempDirectory(); temp.File("src/A.cs", "x"); temp.File("bin/B.cs", "x");
+        Assert.Equal(["src" + Path.DirectorySeparatorChar + "A.cs"], await ProjectSearch.ListFilesAsync(temp.Path));
+    }
+}
