@@ -143,4 +143,16 @@ public sealed class GitTests
         using var temp = new TempDirectory(); using var cancellation = new CancellationTokenSource(TimeSpan.FromMilliseconds(250));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => ProcessRunner.RunAsync(new("powershell.exe", ["-NoProfile", "-Command", "Start-Sleep -Seconds 30"], temp.Path), cancellation: cancellation.Token));
     }
+    [Fact]
+    public async Task DiscardRestoresTrackedFilesAndDeletesUntrackedOnes()
+    {
+        using var temp = new TempDirectory(); await Git(temp.Path, "init", "--initial-branch=main"); await Configure(temp.Path);
+        var tracked = temp.File("a.txt", "original"); await Git(temp.Path, "add", "."); await Git(temp.Path, "commit", "-m", "init");
+        File.WriteAllText(tracked, "edited"); var extra = temp.File("new.txt", "x");
+        var service = new GitService(); var changes = await service.ChangesAsync(temp.Path);
+        var result = await service.DiscardAsync(temp.Path, changes);
+        Assert.True(result.Success, result.Output);
+        Assert.Equal("original", File.ReadAllText(tracked)); Assert.False(File.Exists(extra));
+        Assert.Empty(await service.ChangesAsync(temp.Path));
+    }
 }

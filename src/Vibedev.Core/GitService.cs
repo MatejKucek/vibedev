@@ -121,6 +121,26 @@ public sealed class GitService
         if (paths.Length == 0) throw new ArgumentException("Select files to stage.");
         return ExecuteAsync(path, ["--literal-pathspecs", "add", "--all", "--", .. paths], null, cancellation);
     }
+    /// <summary>Throws away working-tree changes: tracked files are restored from the index, untracked files are deleted. Irreversible.</summary>
+    public async Task<CommandResult> DiscardAsync(string path, IEnumerable<GitFileChange> files, CancellationToken cancellation = default)
+    {
+        var all = files.ToArray();
+        if (all.Length == 0) throw new ArgumentException("Select files to discard.");
+        var tracked = all.Where(f => !f.Untracked).Select(f => f.Path).Distinct().ToArray();
+        var untracked = all.Where(f => f.Untracked).Select(f => f.Path).Distinct().ToArray();
+        CommandResult result = new(0, "");
+        if (tracked.Length > 0)
+        {
+            result = await ExecuteAsync(path, ["--literal-pathspecs", "restore", "--worktree", "--", .. tracked], null, cancellation);
+            if (!result.Success) return result;
+        }
+        if (untracked.Length > 0)
+        {
+            var clean = await ExecuteAsync(path, ["--literal-pathspecs", "clean", "-f", "-d", "--quiet", "--", .. untracked], null, cancellation);
+            return clean.Success ? new(0, (result.Output + "\n" + clean.Output).Trim()) : clean;
+        }
+        return result;
+    }
     public async Task<CommandResult> UnstageAsync(string path, IEnumerable<GitFileChange> files, CancellationToken cancellation = default)
     {
         var paths = files.SelectMany(f => f.OriginalPath is null ? new[] { f.Path } : new[] { f.Path, f.OriginalPath }).Distinct().ToArray();

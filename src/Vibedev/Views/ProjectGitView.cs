@@ -53,7 +53,9 @@ public sealed class ProjectGitView : UserControl, IDisposable
         Grid.SetRow(stagedHeader, 2); root.Children.Add(stagedHeader); Grid.SetRow(staged, 3); root.Children.Add(staged);
         var stageSelected = Ui.Button("+ Selected", async () => await ChangeStageAsync(false)); stageSelected.ToolTip = "Save and stage selected files (Ctrl/Shift+click for multiple files)";
         var stageAll = Ui.Button("+ All", async () => await ChangeStageAsync(false, true)); stageAll.ToolTip = "Save and stage all changed files";
-        var changesHeader = SectionHeader("CHANGES", stageSelected, stageAll);
+        var discardSelected = Ui.Button("↶ Selected", async () => await DiscardAsync(false)); discardSelected.ToolTip = "Discard working-tree changes of the selected files (asks first)";
+        var discardAll = Ui.Button("↶ All", async () => await DiscardAsync(true)); discardAll.ToolTip = "Discard all unstaged changes (asks first)";
+        var changesHeader = SectionHeader("CHANGES", discardSelected, discardAll, stageSelected, stageAll);
         Grid.SetRow(changesHeader, 4); root.Children.Add(changesHeader); Grid.SetRow(changes, 5); root.Children.Add(changes);
         staged.SelectionChanged += async (_, _) => await ShowSelectionAsync(staged, true);
         changes.SelectionChanged += async (_, _) => await ShowSelectionAsync(changes, false);
@@ -228,6 +230,21 @@ public sealed class ProjectGitView : UserControl, IDisposable
             if (!unstage && !await main.SaveProjectFilesAsync(owner.Project, selected.Select(f => Path.GetFullPath(f.Path, owner.Project.Entry.Path)))) return new CommandResult(1, "Save cancelled.");
             return unstage ? await main.Git.UnstageAsync(owner.Project.Entry.Path, selected, lifetime.Token) : await main.Git.StageAsync(owner.Project.Entry.Path, selected, lifetime.Token);
         });
+        await RefreshAsync();
+    }
+    internal async Task DiscardAsync(bool all, bool confirmed = false)
+    {
+        var selected = (all ? changes.Items : changes.SelectedItems).OfType<ListBoxItem>().Select(i => (GitFileChange)i.Tag).ToArray();
+        if (selected.Length == 0) return;
+        if (!confirmed)
+        {
+            var untracked = selected.Count(f => f.Untracked);
+            var names = string.Join("\n", selected.Take(8).Select(f => "  " + f.Path)) + (selected.Length > 8 ? $"\n  … and {selected.Length - 8} more" : "");
+            var text = $"Discard changes in {(selected.Length == 1 ? "1 file" : $"{selected.Length} files")}?\n\n{names}\n\nThis cannot be undone." +
+                (untracked > 0 ? $"\n{untracked} untracked file(s) will be deleted." : "");
+            if (MessageBox.Show(Window.GetWindow(this), text, "Discard changes", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
+        }
+        await main.ChangeGitIndexAsync(owner.Project, () => main.Git.DiscardAsync(owner.Project.Entry.Path, selected, lifetime.Token));
         await RefreshAsync();
     }
     private async Task CommitAsync()
