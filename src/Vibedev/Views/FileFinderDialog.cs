@@ -24,6 +24,8 @@ public sealed class FileFinderDialog : Window
     {
         Owner = owner; Width = 640; SizeToContent = SizeToContent.Height; WindowStartupLocation = WindowStartupLocation.CenterOwner;
         WindowStyle = WindowStyle.None; ResizeMode = ResizeMode.NoResize; ShowInTaskbar = false;
+        // The app's implicit Window style does not apply to subclasses, so a Window subclass is white unless colored explicitly.
+        Background = Ui.Brush("#24242A"); Foreground = Ui.Brush("#E4E4E7"); FontFamily = new("Segoe UI"); FontSize = 13;
         var top = new Grid(); top.ColumnDefinitions.Add(new()); top.ColumnDefinitions.Add(new() { Width = GridLength.Auto });
         top.Children.Add(query); Grid.SetColumn(filter, 1); top.Children.Add(filter);
         var body = new StackPanel { Margin = new(14) };

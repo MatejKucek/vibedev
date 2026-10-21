@@ -304,10 +304,11 @@ public partial class MainWindow : Window
             if (!e.IsRepeat && number <= numberedProjects.Count) OpenProject(numberedProjects[number - 1]);
             return true;
         }
-        if (e.Key != Key.C) return false;
+        if (e.Key is not (Key.C or Key.R)) return false;
         if (Documents().FirstOrDefault(d => d.IsActive && d.Content is ProjectView)?.Content is not ProjectView active) return false;
         e.Handled = true;
-        if (!e.IsRepeat) active.ShowCommit();
+        if (e.IsRepeat) return true;
+        if (e.Key == Key.C) active.ShowCommit(); else GitAction(active.Project, "pull");
         return true;
     }
     private List<ProjectState> numberedProjects = [];
