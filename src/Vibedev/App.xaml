@@ -1,7 +1,8 @@
 ﻿<Application x:Class="Vibedev.App"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:local="clr-namespace:Vibedev">
+             xmlns:local="clr-namespace:Vibedev"
+             xmlns:views="clr-namespace:Vibedev.Views">
     <Application.Resources>
         <SolidColorBrush x:Key="Surface" Color="#202024"/>
         <SolidColorBrush x:Key="Base" Color="#18181B"/>
@@ -133,6 +134,7 @@
                         <Trigger Property="HasItems" Value="False"><Setter TargetName="Expander" Property="Visibility" Value="Hidden"/></Trigger>
                         <Trigger Property="IsExpanded" Value="True"><Setter TargetName="ItemsHost" Property="Visibility" Value="Visible"/></Trigger>
                         <Trigger SourceName="Row" Property="IsMouseOver" Value="True"><Setter TargetName="Row" Property="Background" Value="#28272F"/></Trigger>
+                        <Trigger Property="views:ProjectFileTree.IsMultiSelected" Value="True"><Setter TargetName="Row" Property="Background" Value="#343044"/><Setter TargetName="Row" Property="BorderBrush" Value="#A78BFA"/><Setter Property="Foreground" Value="#F0ECFA"/></Trigger>
                         <Trigger Property="IsSelected" Value="True"><Setter TargetName="Row" Property="Background" Value="#343044"/><Setter TargetName="Row" Property="BorderBrush" Value="#A78BFA"/><Setter Property="Foreground" Value="#F0ECFA"/></Trigger>
                         <Trigger Property="IsEnabled" Value="False"><Setter Property="Opacity" Value="0.5"/></Trigger>
                     </ControlTemplate.Triggers>

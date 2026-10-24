@@ -15,8 +15,16 @@ public sealed class ProjectFileTree : UserControl
         Padding = new(4, 4, 0, 8), BorderThickness = new(0), Background = Ui.Brush("#1D1D21"),
         HorizontalContentAlignment = HorizontalAlignment.Stretch
     };
+    public static readonly DependencyProperty IsMultiSelectedProperty =
+        DependencyProperty.RegisterAttached("IsMultiSelected", typeof(bool), typeof(ProjectFileTree), new FrameworkPropertyMetadata(false));
+    public static bool GetIsMultiSelected(DependencyObject o) => (bool)o.GetValue(IsMultiSelectedProperty);
+    public static void SetIsMultiSelected(DependencyObject o, bool value) => o.SetValue(IsMultiSelectedProperty, value);
+
+    private readonly HashSet<string> selection = new(StringComparer.OrdinalIgnoreCase);
+    private string? anchor;
     public event Action<string>? FileActivated;
     internal TreeView Tree => tree;
+    internal IReadOnlyCollection<string> SelectedPaths => selection;
 
     public ProjectFileTree(string directory)
     {
@@ -29,11 +37,90 @@ public sealed class ProjectFileTree : UserControl
             if (node?.Tag is not string path || !File.Exists(path)) return;
             e.Handled = true; FileActivated?.Invoke(path);
         };
+        tree.PreviewMouseLeftButtonDown += OnMouseDown;
         tree.KeyDown += (_, e) =>
         {
+            if (e.Key == Key.Delete) { e.Handled = true; DeleteSelected(); return; }
             if (e.Key != Key.Enter || tree.SelectedItem is not TreeViewItem { Tag: string path } || !File.Exists(path)) return;
             e.Handled = true; FileActivated?.Invoke(path);
         };
+        Refresh();
+    }
+
+    private void OnMouseDown(object sender, MouseButtonEventArgs e)
+    {
+        if (e.OriginalSource is DependencyObject src && FindParent<System.Windows.Controls.Primitives.ToggleButton>(src) is not null) return;
+        var node = FindNode(e.OriginalSource as DependencyObject);
+        if (node?.Tag is not string path) return;
+        var mods = Keyboard.Modifiers;
+        if (mods.HasFlag(ModifierKeys.Shift) && anchor is not null)
+        {
+            var visible = VisibleNodes(tree.Items).Where(n => n.Tag is string).ToList();
+            var a = visible.FindIndex(n => string.Equals((string)n.Tag, anchor, StringComparison.OrdinalIgnoreCase));
+            var b = visible.FindIndex(n => ReferenceEquals(n, node));
+            if (a < 0 || b < 0) return;
+            if (!mods.HasFlag(ModifierKeys.Control)) selection.Clear();
+            for (var i = Math.Min(a, b); i <= Math.Max(a, b); i++) selection.Add((string)visible[i].Tag);
+        }
+        else if (mods.HasFlag(ModifierKeys.Control))
+        {
+            if (!selection.Remove(path)) selection.Add(path);
+            anchor = path;
+        }
+        else
+        {
+            selection.Clear(); selection.Add(path); anchor = path;
+            ApplySelection();
+            return; // default handling selects the node
+        }
+        e.Handled = true;
+        node.Focus();
+        ApplySelection();
+    }
+
+    private void ApplySelection()
+    {
+        foreach (var n in Nodes(tree.Items)) SetIsMultiSelected(n, n.Tag is string p && selection.Contains(p) && selection.Count > 1);
+    }
+
+    private static T? FindParent<T>(DependencyObject? source) where T : DependencyObject
+    {
+        while (source is not null && source is not T)
+            source = source is Visual ? VisualTreeHelper.GetParent(source) : LogicalTreeHelper.GetParent(source);
+        return source as T;
+    }
+
+    private static IEnumerable<TreeViewItem> VisibleNodes(ItemCollection items)
+    {
+        foreach (var node in items.OfType<TreeViewItem>())
+        {
+            yield return node;
+            if (node.IsExpanded) foreach (var child in VisibleNodes(node.Items)) yield return child;
+        }
+    }
+
+    private void DeleteSelected()
+    {
+        var paths = selection.Count > 0 ? selection.ToList() : (tree.SelectedItem as TreeViewItem)?.Tag is string one ? [one] : [];
+        // drop entries whose ancestor folder is also selected
+        paths = paths.Where(p => !paths.Any(o => !string.Equals(o, p, StringComparison.OrdinalIgnoreCase)
+            && p.StartsWith(o.TrimEnd('\\', '/') + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))).ToList();
+        paths = paths.Where(p => File.Exists(p) || Directory.Exists(p)).ToList();
+        if (paths.Count == 0) return;
+        var text = paths.Count == 1
+            ? $"Move '{Path.GetFileName(paths[0])}' to the Recycle Bin?"
+            : $"Move {paths.Count} items to the Recycle Bin?\n\n" + string.Join("\n", paths.Take(8).Select(p => Path.GetFileName(p))) + (paths.Count > 8 ? "\n…" : "");
+        if (MessageBox.Show(Window.GetWindow(this), text, "Delete", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes) return;
+        foreach (var p in paths)
+        {
+            try
+            {
+                if (Directory.Exists(p)) Microsoft.VisualBasic.FileIO.FileSystem.DeleteDirectory(p, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs, Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+                else Microsoft.VisualBasic.FileIO.FileSystem.DeleteFile(p, Microsoft.VisualBasic.FileIO.UIOption.OnlyErrorDialogs, Microsoft.VisualBasic.FileIO.RecycleOption.SendToRecycleBin);
+            }
+            catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or OperationCanceledException) { Ui.Error(ex.Message, Window.GetWindow(this)); }
+        }
+        selection.Clear(); anchor = null;
         Refresh();
     }
 
@@ -51,6 +138,8 @@ public sealed class ProjectFileTree : UserControl
         if (!Directory.Exists(directory)) { tree.Items.Add(Ui.Text("Project directory is unavailable.", 12, "#F87171")); return; }
         AddChildren(tree.Items, directory);
         foreach (var node in tree.Items.OfType<TreeViewItem>()) Restore(node, expanded, selected);
+        selection.IntersectWith(Nodes(tree.Items).Select(n => n.Tag).OfType<string>());
+        ApplySelection();
     }
     private void Restore(TreeViewItem node, HashSet<string> expanded, string? selected)
     {

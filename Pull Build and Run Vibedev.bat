@@ -2,9 +2,18 @@
 setlocal
 pushd "%~dp0" || exit /b 1
 
+set "dirty="
+for /f "delims=" %%i in ('git status --porcelain') do set "dirty=1"
+
+set "pull_exit_code=0"
+if defined dirty goto skip_pull
 echo Pulling latest changes with rebase...
 git pull -r
 set "pull_exit_code=%errorlevel%"
+goto after_pull
+:skip_pull
+echo Local changes detected, skipping pull.
+:after_pull
 
 if not "%pull_exit_code%"=="0" (
     echo.
