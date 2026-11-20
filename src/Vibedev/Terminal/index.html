@@ -32,6 +32,7 @@ function drain(){if(writing || !writes.length)return;writing=true;const data=wri
   terminal.write(data.data,()=>{for(let i=contexts.length-1;i>=0;i--)if(contexts[i].marker.isDisposed)contexts.splice(i,1);writing=false;drain();});
 }
 window.chrome.webview.addEventListener('message',({data})=>{if(data.type==='output'){writes.push(data);drain();}if(data.type==='archive'){writes.push({data:'\r\n'.repeat(terminal.rows),directory:outputDirectory});drain();}if(data.type==='clear')terminal.clear();if(data.type==='focus')terminal.focus();});
+document.addEventListener('contextmenu',e=>{e.preventDefault();const text=terminal.getSelection();if(text){navigator.clipboard.writeText(text).catch(()=>{});terminal.clearSelection();}});
 new ResizeObserver(resize).observe(document.getElementById('terminal')); resize();
 window.chrome.webview.postMessage({type:'ready'});
 </script></body></html>

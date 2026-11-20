@@ -308,8 +308,16 @@ public partial class MainWindow : Window
         if (Documents().FirstOrDefault(d => d.IsActive && d.Content is ProjectView)?.Content is not ProjectView active) return false;
         e.Handled = true;
         if (e.IsRepeat) return true;
-        if (e.Key == Key.C) active.ShowCommit(); else GitAction(active.Project, "pull");
+        if (e.Key == Key.C) active.ShowCommit(); else _ = PullOneAsync(active.Project);
         return true;
+    }
+    /// <summary>Pulls one project with the same sidebar spinner and result mark as Pull all.</summary>
+    internal async Task PullOneAsync(ProjectState project)
+    {
+        if (project.Busy || pulling || closing) return;
+        project.Pull = PullState.Pulling; Redraw();
+        try { project.Pull = await GitActionAsync(project, "pull") ? PullState.Succeeded : PullState.Failed; }
+        finally { if (project.Pull == PullState.Pulling) project.Pull = PullState.None; Redraw(); }
     }
     private List<ProjectState> numberedProjects = [];
     internal Func<ModifierKeys> Modifiers { get; set; } = () => Keyboard.Modifiers;
