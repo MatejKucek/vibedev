@@ -36,13 +36,22 @@ internal sealed class ProjectTasksView : UserControl
     /// <summary>Counts open task files without a view, so closed projects can show their task count too.</summary>
     public static int CountOpenTasks(string projectPath) => OpenTaskFiles(Path.Combine(projectPath, "tasks", "open")).Length;
 
+    /// <summary>Leading number of the file name (`322-x.md` gives 322); unnumbered files (READMEs) sort last.</summary>
+    private static long TaskNumber(string path)
+    {
+        var stem = Path.GetFileNameWithoutExtension(path);
+        var digits = new string(stem.TakeWhile(char.IsDigit).ToArray());
+        return digits.Length > 0 && long.TryParse(digits, out var n) ? n : long.MaxValue;
+    }
+
     internal static string[] OpenTaskFiles(string directory)
     {
         try
         {
             return Directory.EnumerateFiles(directory, "*", SearchOption.AllDirectories)
                 .Where(path => Path.GetExtension(path).Equals(".md", StringComparison.OrdinalIgnoreCase))
-                .OrderBy(path => Path.GetRelativePath(directory, path), StringComparer.OrdinalIgnoreCase).ToArray();
+                .OrderBy(path => TaskNumber(path))
+                .ThenBy(path => Path.GetRelativePath(directory, path), StringComparer.OrdinalIgnoreCase).ToArray();
         }
         catch (DirectoryNotFoundException) { return []; }
     }
