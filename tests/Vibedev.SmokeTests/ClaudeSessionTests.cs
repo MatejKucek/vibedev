@@ -22,7 +22,7 @@ internal static partial class Program
         }
         await WaitUntilAsync(() => Indicator().Tag is ClaudeActivityLight.Gray, "A project starts with a gray Claude indicator");
         var tasks = Path.Combine(projectPath, "tasks", "open", "nested"); Directory.CreateDirectory(tasks);
-        await File.WriteAllTextAsync(Path.Combine(tasks, "task.md"), "# Open task\n");
+        await File.WriteAllTextAsync(Path.Combine(tasks, "1-task.md"), "# Open task\n");
         await WaitUntilAsync(() => project.OpenTaskCount == 1 && Indicator().Tag is ClaudeActivityLight.Red,
             "The task watcher turns the dashboard red for an open Markdown task");
         await WriteSession("busy");

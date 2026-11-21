@@ -34,7 +34,10 @@ internal sealed class ProjectTasksView : UserControl
     }
 
     /// <summary>Counts open task files without a view, so closed projects can show their task count too.</summary>
-    public static int CountOpenTasks(string projectPath) => OpenTaskFiles(Path.Combine(projectPath, "tasks", "open")).Length;
+    public static int CountOpenTasks(string projectPath) => CountNumbered(OpenTaskFiles(Path.Combine(projectPath, "tasks", "open")));
+
+    /// <summary>Only files with a leading task number count as tasks (READMEs and notes do not).</summary>
+    private static int CountNumbered(string[] paths) => paths.Count(path => TaskNumber(path) != long.MaxValue);
 
     /// <summary>Leading number of the file name (`322-x.md` gives 322); unnumbered files (READMEs) sort last.</summary>
     private static long TaskNumber(string path)
@@ -69,6 +72,6 @@ internal sealed class ProjectTasksView : UserControl
             if (path.Equals(selected, StringComparison.OrdinalIgnoreCase)) files.SelectedItem = item;
         }
         empty.Visibility = paths.Length == 0 ? Visibility.Visible : Visibility.Collapsed;
-        return paths.Length;
+        return CountNumbered(paths);
     }
 }
